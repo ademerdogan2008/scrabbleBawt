@@ -19,14 +19,21 @@ export interface Knob {
 export const LEARNABLE = Object.freeze({
   tableScale: { lo: 0.7, hi: 1.3, def: 1 },
   lambdaScale: { lo: 0.7, hi: 1.3, def: 1 },
-  kappaLo: { lo: 0.42, hi: 0.78, def: 0.6 },
+  kappaLo: { lo: 0.42, hi: 1.0, def: 0.6 },
   kappaHi: { lo: 1.75, hi: 3.9, def: 2.5 },
-  incomeShare: { lo: 0.25, hi: 0.45, def: 0.35 },
-  reserve: { lo: 8, hi: 25, def: 15 },
+  incomeShare: { lo: 0.25, hi: 0.75, def: 0.35 },
+  reserve: { lo: 0, hi: 25, def: 15 },
   floorA: { lo: 1.75, hi: 3.25, def: 2.5 },
   floorB: { lo: 2, hi: 4.55, def: 3.5 },
   maxWinShare: { lo: 0.63, hi: 1, def: 0.9 },
   denyScale: { lo: 0.7, hi: 1.3, def: 1 },
+  // spend-down / anti-bait phase pacing / greedybot-bait guard (src/bots/bawt/params.ts)
+  endWindow: { lo: 0, hi: 30, def: 0 },
+  endKappaLo: { lo: 0.6, hi: 2, def: 1 },
+  earlyScale: { lo: 0.6, hi: 1, def: 1 },
+  greedMinSeats: { lo: 0, hi: 6, def: 0 },
+  baitRatio: { lo: 0.8, hi: 2, def: 2 },
+  baitShade: { lo: 0.6, hi: 1, def: 1 },
 } satisfies Record<string, Knob>);
 
 export type LearnableKey = keyof typeof LEARNABLE;
