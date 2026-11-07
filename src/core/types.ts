@@ -62,6 +62,7 @@ export interface DecideContext {
   budgetMs: number; // compute budget for this call
   rng: Rng; // per-seat seeded stream
   now(): number; // monotonic ms clock for budget checks
+  netRttMs?: number; // live: measured reducer round-trip p90 (sim: simulated); lets policies flush earlier when slow
 }
 
 export interface PlayerState {
