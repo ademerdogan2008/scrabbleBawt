@@ -91,11 +91,13 @@
 |-------------|-------|--------|
 | ENG-01..04 | Phase 1 | Pending |
 | STATE-01..02 | Phase 1 | Pending |
-| SIM-01..04 | Phase 2 | Pending |
-| HIST-01..04 | Phase 2 | Pending |
-| CLI-01..07 | Phase 2 | Pending |
+| SIM-01..04 | Phase 2 (02-01) | Pending |
+| HIST-01..04 | Phase 2 (02-02) | Pending |
+| CLI-01..05 | Phase 2 (02-03; CLI-01/CLI-05 E2E exercise in 02-04) | Pending |
+| CLI-06..07 | Phase 2 (02-04) | Pending |
 | STRAT-01..07 | Phase 3 | Pending |
-| ZOO-01..04 | Phase 3 | Pending |
+| ZOO-01 | Phase 2 (02-01) | Pending |
+| ZOO-02..04 | Phase 3 (03-02; extends 02-01 baselines) | Pending |
 | EVAL-01..03 | Phase 4 | Pending |
 | EVAL-04 | Phase 5 | Pending |
 | REL-01..03 | Phase 5 | Pending |
@@ -107,4 +109,4 @@
 
 ---
 *Requirements defined: 2026-11-07*
-*Last updated: 2026-11-07 after initialization*
+*Last updated: 2026-11-07 after phase-2 plan check (ZOO-01 moved to Phase 2; client split into 02-03/02-04)*

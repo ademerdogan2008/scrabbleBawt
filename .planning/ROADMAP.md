@@ -36,22 +36,23 @@ Plans:
 ### Phase 2: Infrastructure (Simulator, History, Live Client)
 **Goal**: Everything needed to measure and to play: a rules-exact parallel simulator with baselines and stats, the historical dataset with validation and priors, and a working live client with shadow mode and a local-server E2E harness.
 **Depends on**: Phase 1
-**Requirements**: SIM-01, SIM-02, SIM-03, SIM-04, HIST-01, HIST-02, HIST-03, HIST-04, CLI-01, CLI-02, CLI-03, CLI-04, CLI-05, CLI-06, CLI-07
+**Requirements**: SIM-01, SIM-02, SIM-03, SIM-04, HIST-01, HIST-02, HIST-03, HIST-04, CLI-01, CLI-02, CLI-03, CLI-04, CLI-05, CLI-06, CLI-07, ZOO-01
 **Success Criteria** (what must be TRUE):
   1. `npm run bench` plays ≥ 1000 six-player matches in < 5 minutes with paired seeds and prints win%/rank/score/CI/OpenSkill tables
   2. Historical validation reproduces every fetched word reward and participant score with 0 mismatches; `data/profiles.json` exists for the top bots
   3. Shadow mode spectates a live maincloud match end-to-end and reports latency; the local-server harness completes a full match with our client bot
-**Plans**: 3 plans (parallel)
+**Plans**: 4 plans (wave 1: 02-01, 02-02, 02-03 in parallel; wave 2: 02-04)
 
 Plans:
-- [ ] 02-01: `src/sim` — match engine, server-sim replicas, baselines, tournament runner, stats/OpenSkill, bench CLI, parity tests
-- [ ] 02-02: `src/history` — fetch tool, dataset loaders, validation tests, profiles, counterfactual replay, committed sample
-- [ ] 02-03: `src/client` + `e2e/` — connection, targeted subscriptions, adapter, clock, anytime bids, word flush, reconnect, shadow mode, local E2E harness
+- [ ] 02-01-PLAN.md — `src/sim` + `src/bots/baselines` — match engine, server-sim replicas, baselines (ZOO-01 starter replica + greedy; simple hoarder/random), registry, tournament runner, stats/OpenSkill, bench CLI, host-RNG parity tests
+- [ ] 02-02-PLAN.md — `src/history` — fetch tool, dataset loaders, validation tests, profiles, counterfactual replay, committed sample
+- [ ] 02-03-PLAN.md — `src/client` core — config, maincloud write guard, connection, clock/deadlines, redacting log, targeted subscriptions, adapter, anytime bids, word flush (+ packer safety flush), reconnect/resume, lifecycle (unit-tested, no network)
+- [ ] 02-04-PLAN.md — entrypoints + `e2e/` — `npm start` (guarded), whoami, ghost-observer shadow mode on maincloud, local official-module E2E harness incl. kill-and-resume (depends on 02-01, 02-03)
 
 ### Phase 3: Strategy Brain & Opponent Zoo
 **Goal**: Bawt v1 that beats every baseline, plus a diverse opponent population (community clones, top-bot behavioral clones, trick bots) to test against.
 **Depends on**: Phase 2
-**Requirements**: STRAT-01, STRAT-02, STRAT-03, STRAT-04, STRAT-05, STRAT-06, STRAT-07, ZOO-01, ZOO-02, ZOO-03, ZOO-04
+**Requirements**: STRAT-01, STRAT-02, STRAT-03, STRAT-04, STRAT-05, STRAT-06, STRAT-07, ZOO-02, ZOO-03, ZOO-04 (ZOO-01 baselines delivered in Phase 2 / 02-01)
 **Success Criteria** (what must be TRUE):
   1. Bawt v1 wins ≥ 80% vs 5 server sims and beats the starter replica head-to-head
   2. ≥ 4 community clones, ≥ 3 historical clones, ≥ 6 trick bots registered and runnable in the bench
@@ -60,7 +61,7 @@ Plans:
 
 Plans:
 - [ ] 03-01: `src/bots/bawt` — opponent models, MC valuation, Vickrey/FirstPrice bidding with pacing, word cashing, endgame, denial, trick defenses, params
-- [ ] 03-02: `src/bots/{baselines,clones,tricks}` — starter/greedy, community clones, historical clones, trick bots, registry
+- [ ] 03-02: `src/bots/{clones,tricks}` — community clones, historical clones, trick bots, named lineups; extends (does not recreate) the 02-01 baselines and registry
 
 ### Phase 4: Evaluate, Tune & Iterate
 **Goal**: Measured, reasoned improvement of Bawt until gains plateau across all lineups.
@@ -98,7 +99,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (plans inside a phase
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Word Engine | 0/3 | Not started | - |
-| 2. Infrastructure | 0/3 | Not started | - |
+| 2. Infrastructure | 0/4 | Not started | - |
 | 3. Strategy Brain & Opponent Zoo | 0/2 | Not started | - |
 | 4. Evaluate, Tune & Iterate | 0/2 | Not started | - |
 | 5. E2E Validation & Release | 0/2 | Not started | - |

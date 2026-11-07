@@ -154,7 +154,7 @@ export interface MatchView {
 - Subscribe narrowly: own `bot`/credential rows, `match_participant WHERE bot_id = me` (detect new match), then per match `match_state WHERE id=M`, `auction|auction_result|word_play|match_participant WHERE match_id=M`, `my_rack`, and `bot` rows of opponents. Never `subscribeToAllTables` (history is 1.7M+ rows).
 - Process each server transaction fully before deciding (batch callbacks, decide in a microtask/setImmediate).
 - On auction open: quick decision (≤20 ms budget) → submit; refined decision (budget = time-to-close − safety − measured submit latency) → resubmit bid if different. Words before bids.
-- On the LAST auction (remainingAfter=0) and on the one before it: flush all remaining words immediately; verify via word_play echo; retry rejects.
+- On the LAST auction (remainingAfter=0) and on the one before it: flush all remaining words immediately; verify via word_play echo; retry rejects. After the policy's words on the LAST auction, the client runs a safety flush (`getEngine().packer.packExact` on the leftover rack).
 - Reconnect with token; rebuild tracker from per-match history rows; rejoin lobby after `Ended`.
 
 ## Ownership (parallel-safe boundaries)
@@ -166,8 +166,14 @@ export interface MatchView {
 | src/state | state stream | core |
 | src/sim, scripts/bench* | simulator stream | core, engine, state, bots/registry |
 | src/history, scripts/history*, data/history-sample, data/profiles.json | history stream | core, engine |
-| src/client, e2e/ | client stream | core, state, bots/registry |
+| src/client, e2e/ | client stream | core, state, bots/registry, engine (only `getEngine().packer` for the final-auction safety flush) |
 | src/bots/bawt | strategy stream | core, engine, state |
 | src/bots/{baselines,clones,tricks} | opponent-zoo stream | core, engine, state |
 
 New npm dependencies require orchestrator approval (shared package.json).
+
+Ownership decisions:
+- **2026-11-07 (phase-2 plan check): src/client MAY import src/engine** — only `getEngine().packer` — for a safety flush at the final auction (`remainingAfter == 0`) when the policy's words leave playable value on the rack (CLI-04, PITFALLS C4). The policy still owns all word decisions; the client flush only submits what `packExact` finds in the leftover rack after the policy's words.
+- src/client must never import `src/sim/hostRng`, `src/sim/hostReplay` or `src/sim/index` (fair-play guard test in 02-01); the same holds for src/bots.
+- All client reducer calls go through `src/client/guard.ts` (maincloud game reducers blocked unless `ALLOW_MAINCLOUD_PLAY=1`).
+- src/bots/baselines (starter, greedy, hoarder, random) is built in 02-01; 03-02 extends it and must not recreate it.
