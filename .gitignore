@@ -12,6 +12,8 @@ dist/
 
 # local runtime artifacts
 .cache/
+# full history dump (scripts/history-fetch.ts default --out); only data/history-sample/ is committed
+data/history/
 out/
 runs/
 *.log
