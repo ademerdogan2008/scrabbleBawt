@@ -17,3 +17,6 @@ runs/
 *.log
 coverage/
 .DS_Store
+
+# agent worktrees
+.claude/worktrees/
