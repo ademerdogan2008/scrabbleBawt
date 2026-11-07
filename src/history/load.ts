@@ -241,6 +241,8 @@ export async function loadMatches(dir: string, opts: LoadOptions = {}): Promise<
       rawAuctionType: String(s.auction_type),
       auctionDurationMs: s.auction_duration_ms,
       startingRackSize: s.starting_rack_size,
+      currentRound: s.current_round,
+      bagTotal: s.bag_total,
       createdAtUs: s.created_at,
       startedAtUs: s.started_at,
       endedAtUs: s.ended_at,

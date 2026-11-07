@@ -125,6 +125,38 @@ describe('loadMatches on the mini fixture (gz)', async () => {
   });
 });
 
+describe('loadMatches on the committed sample', async () => {
+  const D = await loadMatches(path.join(__dirname, '..', '..', 'data', 'history-sample'));
+
+  it('maps tournament phases to match kinds and keeps the shared attribution rule', () => {
+    const kinds = new Set(D.matches.filter((m) => m.tournament).map((m) => m.kind));
+    expect([...kinds].sort()).toEqual(['bracket', 'final', 'swiss']);
+    const finals = D.matches.filter((m) => m.kind === 'final');
+    expect(finals).toHaveLength(3);
+    for (const f of finals) {
+      expect(f.participants).toHaveLength(2);
+      expect(f.expectedAuctions).toBe(88);
+      expect(f.complete).toBe(true);
+    }
+    let sim = 0;
+    let real = 0;
+    for (const m of D.matches.filter((x) => x.complete)) {
+      for (const w of m.words) {
+        if (D.bots.get(w.botId)!.isSim) {
+          sim++;
+          expect(w.inClose).toBe(true);
+        } else {
+          real++;
+          expect(w.inClose).toBe(false);
+          expect(w.auctionIndex).toBeLessThan(m.auctions.length);
+        }
+      }
+    }
+    expect(sim).toBeGreaterThan(100);
+    expect(real).toBeGreaterThan(1000);
+  });
+});
+
 describe('attributeWords (synthetic, strict < and equality)', () => {
   const mk = (id: number, at: number): HistWord => ({
     id,

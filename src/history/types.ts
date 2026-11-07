@@ -144,6 +144,10 @@ export interface HistMatch {
   rawAuctionType: string;
   auctionDurationMs: number;
   startingRackSize: number;
+  /** match_state.current_round (final value == number of auctions for ended matches). */
+  currentRound: number;
+  /** match_state.bag_total (0 for ended matches). */
+  bagTotal: number;
   createdAtUs: number;
   startedAtUs: number | null;
   endedAtUs: number | null;
