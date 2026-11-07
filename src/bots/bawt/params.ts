@@ -28,8 +28,12 @@ export interface BawtParams {
   mcHorizon: number;
   /** Cap on rack + future letters packed inside the MC (larger racks shorten H). */
   mcMaxLetters: number;
+  /** Skip the MC (table only) when its blend weight cover = H / (f·share) is below this. */
+  mcMinCover: number;
   /** packExact node limit inside the MC (deterministic); packTimeMs is only a safety net. */
   mcNodeLimit: number;
+  /** Deterministic work cap per decision: stop sampling after this many search nodes (>= 4 samples). */
+  mcNodeBudget: number;
   packTimeMs: number;
   /** Max share of the future auctions we assume we can win. */
   maxWinShare: number;
@@ -131,8 +135,10 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   tableScale: 1,
   mcSamples: 16,
   mcHorizon: 12,
-  mcMaxLetters: 22,
-  mcNodeLimit: 6000,
+  mcMaxLetters: 16,
+  mcMinCover: 0.35,
+  mcNodeLimit: 3000,
+  mcNodeBudget: 30000,
   packTimeMs: 15,
   maxWinShare: 0.9,
   minWinShare: 0.12,
