@@ -79,6 +79,17 @@ export interface GuardOptions {
   env?: Record<string, string | undefined>;
 }
 
+/** A ReducerHost that resolves the current connection lazily (reconnects swap the connection). */
+export function lazyReducerHost(current: () => ReducerHost | undefined): ReducerHost {
+  return {
+    get reducers(): object {
+      const c = current();
+      if (!c) throw new Error('callReducer: not connected');
+      return c.reducers;
+    },
+  };
+}
+
 /** snake_case reducer name -> camelCase accessor used by the SDK (`submit_bid` -> `submitBid`). */
 export function reducerAccessor(name: string): string {
   return name.replace(/_([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
