@@ -6,10 +6,14 @@
 //   * Live mode runs the 02-03 session. Against maincloud without ALLOW_MAINCLOUD_PLAY=1 in the real
 //     environment it prints "read-only: refusing to play" and exits non-zero BEFORE connecting
 //     (guard.ts default-deny; runSession refuses without touching the network).
+//   * Learning (src/learn): policy 'bawt' plays a Thompson-sampled arm per match and learns from
+//     every result (state in .cache/learn/state.json / LEARN_STATE). LEARN=0 disables it. Any
+//     learning failure falls back to the plain policy; nothing learning-related runs in decide().
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createPolicy, listPolicies } from '../bots/registry.js';
 import type { PolicyFactory } from '../core/types.js';
+import { createLearningFactory, defaultStatePath, learningEnabled, type LearnHandle } from '../learn/index.js';
 import { summarizeStats, type MatchDriver } from './adapter.js';
 import { defaultEnvPath, loadConfig, type ClientConfig } from './config.js';
 import { runSession } from './session.js';
@@ -59,6 +63,30 @@ export function dumpLatency(logDir: string, drivers: Iterable<MatchDriver>, done
   }
 }
 
+/**
+ * Learning wrapper over the registry factory for the live client, or undefined when disabled
+ * (LEARN=0, a policy other than 'bawt') or when it cannot be set up (then: the plain factory).
+ */
+export function learningFactory(
+  cfg: Pick<ClientConfig, 'policy' | 'params' | 'logDir'>,
+  env: Record<string, string | undefined> = process.env,
+): LearnHandle | undefined {
+  if (!learningEnabled(env, cfg.policy)) return undefined;
+  try {
+    return createLearningFactory({
+      create: (seed, extra) => createPolicy(policySpec({ policy: cfg.policy, params: { ...cfg.params, ...extra } }), seed),
+      baseParams: cfg.params,
+      statePath: defaultStatePath(env),
+      logFile: join(cfg.logDir, 'learn.jsonl'),
+      log: (line) => console.log(line),
+      warn: (msg) => console.error(msg),
+    });
+  } catch (e) {
+    console.error(`learn: disabled (${e instanceof Error ? e.message : String(e)})`);
+    return undefined;
+  }
+}
+
 export function loadEntryConfig(): ClientConfig {
   const names = new Set(listPolicies());
   return loadConfig({ envPath: entryEnvPath(), isPolicyRegistered: (n) => names.has(n) });
@@ -81,8 +109,9 @@ async function main(): Promise<number> {
     return res.ok ? EXIT_OK : res.reason === 'no running match found' ? 2 : EXIT_ERROR;
   }
 
-  console.log(`live client: ${String(cfg)} spec=${spec}`);
-  const s = await runSession({ cfg, policyFactory });
+  const learn = learningFactory(cfg);
+  console.log(`live client: ${String(cfg)} spec=${spec}${learn ? ` learn=${learn.statePath}` : ''}`);
+  const s = await runSession({ cfg, policyFactory: learn?.factory ?? policyFactory });
   const stop = (): void => s.stop();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
