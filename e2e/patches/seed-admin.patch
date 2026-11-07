@@ -1,0 +1,15 @@
+LOCAL E2E ONLY (plan 02-04). Adds the local server's CLI identity to SEED_ADMIN_HEX so that
+`init` seeds it as an admin on a fresh local database (bootstrap_admin refuses once the hardcoded
+seed admin exists). Admin is needed only for set_matchmaker_config / tournament reducers locally.
+setup-local.sh replaces __LOCAL_ADMIN_HEX__ with the identity minted from the local server.
+Never publish a module built with this patch anywhere but the loopback E2E server.
+
+--- a/spacetimedb/src/game.ts
++++ b/spacetimedb/src/game.ts
+@@ -82,4 +82,6 @@
+ export const SEED_ADMIN_HEX: readonly string[] = [
+   // Tyler
+   "c200dd4e4e3e77c361561eee4c4932743ae44c634cf74819209080d98d5bc07e",
++  // scrabbleBawt local E2E admin (e2e/setup-local.sh)
++  "__LOCAL_ADMIN_HEX__",
+ ];

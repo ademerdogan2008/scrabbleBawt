@@ -6,8 +6,11 @@
 //   * Live mode runs the 02-03 session. Against maincloud without ALLOW_MAINCLOUD_PLAY=1 in the real
 //     environment it prints "read-only: refusing to play" and exits non-zero BEFORE connecting
 //     (guard.ts default-deny; runSession refuses without touching the network).
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createPolicy, listPolicies } from '../bots/registry.js';
 import type { PolicyFactory } from '../core/types.js';
+import { summarizeStats, type MatchDriver } from './adapter.js';
 import { defaultEnvPath, loadConfig, type ClientConfig } from './config.js';
 import { runSession } from './session.js';
 import { runShadow } from './shadow.js';
@@ -31,6 +34,29 @@ export function policySpec(cfg: Pick<ClientConfig, 'policy' | 'params'>): string
 export function registryFactory(spec: string): PolicyFactory {
   createPolicy(spec, 0);
   return (seed) => createPolicy(spec, seed);
+}
+
+/**
+ * Raw per-auction latency samples of every ENDED driver (that played) -> LOG_DIR/latency-<match>.json,
+ * once per match. The driver's timing record only keeps p50/p99; the E2E harness pools these raw
+ * samples across clients (anchor = transaction received -> anchor submit_bid sent).
+ */
+export function dumpLatency(logDir: string, drivers: Iterable<MatchDriver>, done: Set<number>, policy: string): void {
+  for (const dr of drivers) {
+    if (!dr.ended || done.has(dr.matchId)) continue;
+    done.add(dr.matchId);
+    if (dr.stats.decisions === 0) continue;
+    try {
+      mkdirSync(logDir, { recursive: true });
+      const { anchorMs, decideMs, loopLagMs } = dr.stats;
+      writeFileSync(
+        join(logDir, `latency-${dr.matchId}.json`),
+        JSON.stringify({ matchId: dr.matchId, policy, anchorMs, decideMs, loopLagMs, summary: summarizeStats(dr.stats) }),
+      );
+    } catch (e) {
+      console.error(`latency dump failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
 }
 
 export function loadEntryConfig(): ClientConfig {
@@ -60,7 +86,13 @@ async function main(): Promise<number> {
   const stop = (): void => s.stop();
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
+  const dumped = new Set<number>();
+  const dumpAll = (): void => dumpLatency(cfg.logDir, s.core.drivers.values(), dumped, spec);
+  const poll = setInterval(dumpAll, 500);
+  poll.unref();
   const status = await s.done;
+  clearInterval(poll);
+  dumpAll();
   if (status === 'refused') {
     console.error('read-only: refusing to play');
     return EXIT_REFUSED;

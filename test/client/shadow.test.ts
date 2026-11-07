@@ -1,16 +1,19 @@
 // Shadow mode (ghost observer) without a network: ghost config, a scripted fake-server match observed
 // from the start and from mid-match, log replay with 0 diagnostics, no reducer calls, the query list
 // (never the top-bid leak view), running-match discovery over a fake HTTP SQL API, entrypoint helpers.
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { VALUE, idx } from '../../src/core/letters.js';
 import { rackTotal } from '../../src/core/rack.js';
 import type { Decision, Policy, PolicyFactory } from '../../src/core/types.js';
 import { replay } from '../../src/state/events.js';
 import type { MatchTracker } from '../../src/state/tracker.js';
-import type { MatchStateRow, ParticipantRow } from '../../src/client/adapter.js';
+import type { MatchDriver, MatchStateRow, ParticipantRow } from '../../src/client/adapter.js';
 import { ClientClock } from '../../src/client/clock.js';
 import { eventsFromLog, Logger } from '../../src/client/log.js';
-import { entryEnvPath, policySpec, registryFactory } from '../../src/client/main.js';
+import { dumpLatency, entryEnvPath, policySpec, registryFactory } from '../../src/client/main.js';
 import {
   AnonSql,
   diagZero,
@@ -270,5 +273,32 @@ describe('entrypoint helpers', () => {
   it('ENV_FILE overrides the repo .env path', () => {
     expect(entryEnvPath({ ENV_FILE: '/x/y.env' })).toBe('/x/y.env');
     expect(entryEnvPath({})).toMatch(/\.env$/);
+  });
+
+  it('dumps raw latency samples once per ended, played match', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lat-'));
+    try {
+      const stats = (decisions: number) => ({
+        decisions, decideMs: [0.1, 0.2], anchorMs: [0.5, 1.5], loopLagMs: [0.01], bidsSent: 2, bidsSkippedDeadline: 0,
+        wordsSent: 0, wordsSkipped: 0, wordRejections: 0, bidRejections: 0, balanceRetries: 0, timingErrors: 0,
+        matchOverErrors: 0, safetyFlushWords: 0, replans: 0, lateOpens: 1,
+      });
+      const drivers = [
+        { matchId: 5, ended: true, stats: stats(2) },
+        { matchId: 6, ended: false, stats: stats(2) },
+        { matchId: 4, ended: true, stats: stats(0) }, // boot resume-check of an already-Ended match
+      ] as unknown as MatchDriver[];
+      const done = new Set<number>();
+      dumpLatency(dir, drivers, done, 'starter');
+      dumpLatency(dir, drivers, done, 'starter');
+      expect(existsSync(join(dir, 'latency-5.json'))).toBe(true);
+      expect(existsSync(join(dir, 'latency-6.json'))).toBe(false);
+      expect(existsSync(join(dir, 'latency-4.json'))).toBe(false);
+      const j = JSON.parse(readFileSync(join(dir, 'latency-5.json'), 'utf8'));
+      expect(j).toMatchObject({ matchId: 5, policy: 'starter', anchorMs: [0.5, 1.5], decideMs: [0.1, 0.2] });
+      expect(j.summary.anchorP99).toBe(1.5);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
