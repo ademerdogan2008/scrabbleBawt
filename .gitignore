@@ -1,0 +1,19 @@
+# dependencies & build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# secrets — never commit tokens
+.env
+.env.*
+!.env.example
+.token-*
+*.token
+
+# local runtime artifacts
+.cache/
+out/
+runs/
+*.log
+coverage/
+.DS_Store
