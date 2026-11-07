@@ -111,7 +111,7 @@ describe('starter (exact official bot-starter port)', () => {
   });
 
   it('plays exactly one word after the deal, then nothing until its next win, then resets per match', () => {
-    const start = 'AAXX';
+    const start = 'JJOO';
     const first = engine.index.findBestPlayable(rackFromWord(start), 2)!;
     const rest = rackFromWord(start);
     for (const ch of first) rest[idx(ch)]!--;
@@ -155,11 +155,11 @@ describe('starter (exact official bot-starter port)', () => {
 describe('greedy / hoarder / random', () => {
   it('greedy repeats bestSingleWord while one exists', () => {
     const c = cfg(6);
-    const h = new Harness(createPolicy('greedy', 1), c, 'AAXXOQ');
+    const h = new Harness(createPolicy('greedy', 1), c, 'JJOOAQ');
     const a = auction(0, 'E', c);
     h.tracker.auctionOpen(a);
     const d = h.policy.decide(h.tracker.view, a, ctx());
-    const rack = rackFromWord('AAXXOQ');
+    const rack = rackFromWord('JJOOAQ');
     const expected: string[] = [];
     for (;;) {
       const w = engine.index.bestSingleWord(rack, 2);
