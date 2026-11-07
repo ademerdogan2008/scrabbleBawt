@@ -43,6 +43,8 @@ export class AnagramIndex {
   readonly term: Int32Array;
   /** Longest key length (absolute) in the subtree rooted at node. */
   readonly maxLen: Uint8Array;
+  /** Bit l set when node has an outgoing edge labelled l. */
+  readonly childMask: Int32Array;
 
   // DFS scratch (instance fields keep the inner loop allocation-free).
   private readonly work = new Uint8Array(NUM_LETTERS);
@@ -51,6 +53,10 @@ export class AnagramIndex {
   private pivot = -1;
   private bestId = -1;
   private bestLen = 0;
+  private readonly stNode = new Int32Array(64);
+  private readonly stEdge = new Int32Array(64);
+  private readonly stMask = new Int32Array(64);
+  private readonly stLetter = new Uint8Array(64);
   private readonly pool: IntBuffer[] = [];
   private poolDepth = 0;
 
@@ -116,6 +122,9 @@ export class AnagramIndex {
     this.edgeChild = edgeChild;
     this.term = term.slice(0, n);
     this.maxLen = maxLen;
+    const childMask = new Int32Array(n);
+    for (let v = 1; v < n; v++) childMask[parent[v]!]! |= 1 << letter[v]!;
+    this.childMask = childMask;
   }
 
   // ---------------------------------------------------------------- class accessors
@@ -158,15 +167,17 @@ export class AnagramIndex {
     const start = out.length;
     const work = this.work;
     for (let i = 0; i < NUM_LETTERS; i++) work[i] = rack[i]!;
+    let mask = 0;
+    for (let i = 0; i < NUM_LETTERS; i++) if (work[i]! > 0) mask |= 1 << i;
     this.out = out;
     this.minLen = minLen;
     if (pivot >= 0) {
       if (work[pivot]! > 0) {
         this.pivot = pivot;
-        this.dfsBefore(0, 0);
+        this.dfsBefore(0, 0, mask);
       }
     } else {
-      this.dfs(0, 0);
+      this.dfsIter(mask);
     }
     return out.length - start;
   }
@@ -199,37 +210,117 @@ export class AnagramIndex {
     return this.collect(rack, minLen, buf);
   }
 
-  private dfs(node: number, depth: number): void {
+  /** Iterative full enumeration (same semantics as dfs(0, 0, mask)), output pushed inline. */
+  private dfsIter(mask: number): void {
+    const out = this.out;
+    let data = out.data;
+    let len = out.length;
+    const work = this.work;
+    const term = this.term;
+    const maxLen = this.maxLen;
+    const childMask = this.childMask;
+    const edgeStart = this.edgeStart;
+    const edgeLetter = this.edgeLetter;
+    const edgeChild = this.edgeChild;
+    const minLen = this.minLen;
+    const stNode = this.stNode;
+    const stEdge = this.stEdge;
+    const stMask = this.stMask;
+    const stLetter = this.stLetter;
+    let sp = 0;
+    stNode[0] = 0;
+    stEdge[0] = edgeStart[0]!;
+    stMask[0] = mask;
+    for (;;) {
+      const node = stNode[sp]!;
+      const end = edgeStart[node + 1]!;
+      const m0 = stMask[sp]!;
+      const d1 = sp + 1;
+      let e = stEdge[sp]!;
+      let next = -1;
+      for (; e < end; e++) {
+        const c = edgeLetter[e]!;
+        const left = work[c]!;
+        if (left === 0) continue;
+        const child = edgeChild[e]!;
+        if (maxLen[child]! < minLen) continue;
+        const m = left === 1 ? m0 & ~(1 << c) : m0;
+        const t = term[child]!;
+        if (t >= 0 && d1 >= minLen) {
+          if (len === data.length) {
+            out.length = len;
+            out.grow(len + 1);
+            data = out.data;
+          }
+          data[len++] = t;
+        }
+        if ((childMask[child]! & m) === 0) continue;
+        stEdge[sp] = e + 1;
+        stLetter[sp] = c;
+        work[c] = left - 1;
+        stNode[d1] = child;
+        stEdge[d1] = edgeStart[child]!;
+        stMask[d1] = m;
+        next = d1;
+        break;
+      }
+      if (next >= 0) {
+        sp = next;
+        continue;
+      }
+      if (sp === 0) break;
+      sp--;
+      work[stLetter[sp]!]!++;
+    }
+    out.length = len;
+  }
+
+  // `mask` = letters still available in this.work. A child is entered only if it can still report
+  // something: it is a terminal at a reportable depth, or one of its edge letters is available.
+  private dfs(node: number, depth: number, mask: number): void {
     const t = this.term[node]!;
     if (t >= 0 && depth >= this.minLen) this.out.push(t);
     const work = this.work;
+    const term = this.term;
+    const maxLen = this.maxLen;
+    const childMask = this.childMask;
+    const minLen = this.minLen;
+    const d1 = depth + 1;
     const end = this.edgeStart[node + 1]!;
     for (let e = this.edgeStart[node]!; e < end; e++) {
       const c = this.edgeLetter[e]!;
-      if (work[c] === 0) continue;
+      const left = work[c]!;
+      if (left === 0) continue;
       const child = this.edgeChild[e]!;
-      if (this.maxLen[child]! < this.minLen) continue;
-      work[c]!--;
-      this.dfs(child, depth + 1);
-      work[c]!++;
+      if (maxLen[child]! < minLen) continue;
+      const m = left === 1 ? mask & ~(1 << c) : mask;
+      if ((childMask[child]! & m) === 0) {
+        if (term[child]! >= 0 && d1 >= minLen) this.out.push(term[child]!);
+        continue;
+      }
+      work[c] = left - 1;
+      this.dfs(child, d1, m);
+      work[c] = left;
     }
   }
 
   /** Pivot not taken yet: only letters <= pivot may follow (keys are sorted). */
-  private dfsBefore(node: number, depth: number): void {
+  private dfsBefore(node: number, depth: number, mask: number): void {
     const work = this.work;
     const pivot = this.pivot;
     const end = this.edgeStart[node + 1]!;
     for (let e = this.edgeStart[node]!; e < end; e++) {
       const c = this.edgeLetter[e]!;
       if (c > pivot) break;
-      if (work[c] === 0) continue;
+      const left = work[c]!;
+      if (left === 0) continue;
       const child = this.edgeChild[e]!;
       if (this.maxLen[child]! < this.minLen) continue;
-      work[c]!--;
-      if (c === pivot) this.dfs(child, depth + 1);
-      else this.dfsBefore(child, depth + 1);
-      work[c]!++;
+      const m = left === 1 ? mask & ~(1 << c) : mask;
+      work[c] = left - 1;
+      if (c === pivot) this.dfs(child, depth + 1, m);
+      else this.dfsBefore(child, depth + 1, m);
+      work[c] = left;
     }
   }
 
