@@ -11,7 +11,7 @@
 //
 // Simplified (compute budget, decide p99 < 50 ms):
 //   * P(rack) = fast packing (greedy + 16-word first-word beam) instead of top-12 + greedy.
-//   * Samples: 6 for the open letter (K-13: 8 quick), 2 per letter for the λ table (recomputed
+//   * Samples: 6 for the open letter (K-13: 8 quick), 1 per letter for the λ table (recomputed
 //     only when the rack changes), 3 for play-vs-hold over the top 4 candidates; k capped at
 //     kCap = 6 (K-13: 13) and so that sampled racks stay <= mcRackCap = 16 tiles.
 //   * Hoard valve (not in K-13): at >= 16 tiles it cashes best-partition words down to 11.
@@ -65,7 +65,7 @@ export const K13_DEFAULTS: Readonly<K13Params> = Object.freeze({
   kInitPrice: 13,
   maxWinShare: 0.5,
   quickSamples: 6,
-  tableSamples: 2,
+  tableSamples: 1,
   lambdaMin: 0.02,
   lambdaMax: 4,
   lambdaScale: 1.08,
