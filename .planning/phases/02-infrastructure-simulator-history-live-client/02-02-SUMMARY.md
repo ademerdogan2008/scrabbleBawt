@@ -129,8 +129,19 @@ completed: 2026-11-07
   - An all-in policy is only credited with letters it won, at price = field (1 when the field is 0) and never above its bid.
   - Non-Vickrey, incomplete and target-absent matches are skipped and counted.
 - `grep -rn "visible_auction_top_bids" src/history scripts | grep -v -i "refuse\|deny\|forbid"` finds nothing.
-- **`--policy starter` vs Bron: pending-merge.** In this worktree the run exits 2 with "registry not available (02-01 not merged)", as designed. Re-run it at phase verification after 02-01 is merged:
-  `NODE_OPTIONS=--max-old-space-size=8192 npx tsx scripts/history-replay.ts --policy starter --target Bron --matches 500 --data <dir>`
+- **`--policy starter` vs Bron (run after the wave-1 merge, registry resolved, full dataset, 200 evenly spaced matches, tie-mode coin, seed 1):**
+  `NODE_OPTIONS=--max-old-space-size=8192 npx tsx scripts/history-replay.ts --policy starter --target Bron --matches 200 --data <dir>`
+
+| run | n | ours win% [95% CI] | original win% | avg rank ours / original | avg score ours / original | delta |
+|---|---|---|---|---|---|---|
+| starter, Bron, tie-mode coin | 200 | 3.0% [1.4, 6.4] | 41.0% [34.4, 47.9] | 4.375 / 2.250 | 12.91 ± 1.77 / 134.74 ± 9.58 | -121.83 ± 8.73 |
+
+  - Letters/match: 3.38 for starter, 21.70 for Bron. Average price 3.27. Unplayed letters/match 2.69.
+  - 0 rejected words, 0 rejected bids, 0 policy errors. 0/200 exact score matches.
+  - 3880 unattributed losses. 484 ties, of which 243 were won.
+  - Tracker diagnostics: hiddenOverflow 56, unseenNegative 25, in 45 matches. These are expected when opponents replay letters we took.
+  - Load took 3.3 s and replay 0.4 s (1.78 ms/match).
+  - The starter baseline is far below Bron, so the harness separates a weak policy from a strong one clearly.
 
 ## Task Commits
 1. Task 1, fetch and load: `aab3518`
@@ -155,7 +166,7 @@ completed: 2026-11-07
 - **[Typecheck]** The dynamic registry import uses a specifier held in a variable rather than a literal `import("../src/bots/registry.js")`. This keeps `tsc` green until 02-01 is merged, and the runtime behaviour is unchanged.
 
 ## Known Stubs
-None. The starter-vs-Bron benchmark number waits on the 02-01 registry merge. The replay CLI is complete and reports the missing registry explicitly.
+None. The starter-vs-Bron benchmark was run after the wave-1 merge (see Replay above).
 
 ## Issues / notes for consumers
 - After merge, consolidate `src/history/stats.ts` `wilson` with 02-01's `src/sim/stats.ts`.
