@@ -161,6 +161,11 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       kappaHi,
     });
     if (p.lambdaScale !== 1) pacing.kappa /= p.lambdaScale;
+    if (p.earlyScale !== 1 && !allSims) {
+      const prog = auction.index / Math.max(1, T);
+      const ramp = prog <= p.earlyUntil ? 0 : Math.min(1, (prog - p.earlyUntil) / Math.max(1e-6, p.rampEnd - p.earlyUntil));
+      pacing.kappa *= p.earlyScale + (1 - p.earlyScale) * ramp;
+    }
     const li = idx(auction.letter);
     return {
       rack,

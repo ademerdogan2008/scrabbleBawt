@@ -65,6 +65,12 @@ export interface BawtParams {
    *  ramps linearly up to `endKappaLo` (coins are worth nothing once the bag is empty). 0 = off. */
   endWindow: number;
   endKappaLo: number;
+  /** Anti-bait phase pacing ("push early, harvest late" field): κ is scaled by earlyScale until
+   *  earlyUntil·T auctions, then ramps linearly to 1 at rampEnd·T. Saves coins from the pushed
+   *  early market for the cheap late harvest. 1 = off. */
+  earlyScale: number;
+  earlyUntil: number;
+  rampEnd: number;
 
   // ---------------------------------------------------------------- floor (§11 HYB)
   floorA: number;
@@ -170,6 +176,9 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   lambdaScale: 1,
   endWindow: 0,
   endKappaLo: 1,
+  earlyScale: 1,
+  earlyUntil: 0.5,
+  rampEnd: 0.75,
   floorA: 2.5,
   floorB: 3.5,
   vowelCap: 0.4,
