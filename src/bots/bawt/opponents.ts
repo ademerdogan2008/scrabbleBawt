@@ -221,6 +221,24 @@ export class OpponentModel {
     this.logPost = Float64Array.from(this.grid, (x) => -(x * x) / (2 * sd * sd));
   }
 
+  /** Centre of the log-scale prior (0 = profile / market prior; shifted by the learned book). */
+  priorCentre = 0;
+
+  /**
+   * Re-centre the log-scale prior at `mu` (clamped to the grid) before any observation, keeping the
+   * prior sd. Used by the opponent-book hook so a known rival starts from its learned calibration.
+   */
+  setPriorCentre(mu: number, sd: number): void {
+    if (!Number.isFinite(mu) || this.observed > 0) return;
+    const c = Math.max(this.grid[0]!, Math.min(this.grid[GRID - 1]!, mu));
+    this.priorCentre = c;
+    for (let g = 0; g < GRID; g++) {
+      const d = this.grid[g]! - c;
+      this.logPost[g] = -(d * d) / (2 * sd * sd);
+    }
+    this.updateScale();
+  }
+
   /** Recompute logScale as the posterior mean over the grid. */
   updateScale(): void {
     let mx = -Infinity;
@@ -307,6 +325,48 @@ export class OpponentModel {
   }
 }
 
+// ------------------------------------------------------------------------- opponent-book hook
+
+/** Learned calibration of one rival (src/learn/book.ts): mean posterior log-scale over n matches. */
+export interface OpponentPrior {
+  logScale: number;
+  n: number;
+}
+
+/** Per-match hook session: book priors by rival name, and a handle on the match's field model. */
+export interface FieldModelHookSession {
+  prior?(name: string, kind: Exclude<OpponentKind, 'sim'>): OpponentPrior | undefined;
+  attach?(field: FieldModel): void;
+}
+
+export type FieldModelHook = (config: MatchConfig) => FieldModelHookSession | undefined;
+
+let fieldHook: FieldModelHook | undefined;
+
+/**
+ * Install (or clear with undefined) the process-wide field-model hook; returns the previous one.
+ * Unset (the default, and in every simulator run) the field model is exactly the profile one.
+ */
+export function setFieldModelHook(hook: FieldModelHook | undefined): FieldModelHook | undefined {
+  const prev = fieldHook;
+  fieldHook = hook;
+  return prev;
+}
+
+/**
+ * Pseudo-count of the profiles.json / market prior when blending in a book prior: the prior centre
+ * is w·book.logScale with w = n / (n + k). Profiled bots already have thousands of matches behind
+ * their curves, so our own observations move them more slowly than unknown (market) bots.
+ */
+export const BOOK_PRIOR_K: Readonly<Record<Exclude<OpponentKind, 'sim'>, number>> = Object.freeze({ profiled: 8, market: 2 });
+
+/** Blended prior centre (log-scale) for a book prior; 0 when there is no usable prior. */
+export function blendPriorCentre(prior: OpponentPrior | undefined, kind: Exclude<OpponentKind, 'sim'>): number {
+  if (!prior || !(prior.n > 0) || !Number.isFinite(prior.logScale)) return 0;
+  const w = prior.n / (prior.n + BOOK_PRIOR_K[kind]);
+  return w * prior.logScale;
+}
+
 // ------------------------------------------------------------------------------------- field
 
 /** Mid-interval PIT of an integer observation interval [lo, hi] under CDF F (F(-1) = 0). */
@@ -341,6 +401,33 @@ export class FieldModel {
       const m = new OpponentModel(p.id, p.name, p.isSim ? (p.simStrategy ?? 'Human') : undefined, prof, median, calib);
       this.opponents.push(m);
       this.byId.set(p.id, m);
+    }
+    this.applyHook(config);
+  }
+
+  /** Opponent-book priors (learning hook). Never throws; a failing hook leaves the profile priors. */
+  private applyHook(config: MatchConfig): void {
+    if (!fieldHook) return;
+    let session: FieldModelHookSession | undefined;
+    try {
+      session = fieldHook(config);
+    } catch {
+      return;
+    }
+    if (!session) return;
+    for (const o of this.opponents) {
+      if (o.kind === 'sim') continue;
+      try {
+        const mu = blendPriorCentre(session.prior?.(o.name, o.kind), o.kind);
+        if (mu !== 0) o.setPriorCentre(mu, this.calib.calibPriorSd);
+      } catch {
+        // keep the profile prior
+      }
+    }
+    try {
+      session.attach?.(this);
+    } catch {
+      // ignore
     }
   }
 
