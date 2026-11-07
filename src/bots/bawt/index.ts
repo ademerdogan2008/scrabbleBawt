@@ -102,6 +102,10 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
   let field: FieldModel | undefined;
   let share = 0.3;
   let lastBid = 0;
+  // greedybot-bait detector: EWMA of paid / our bid over our Vickrey wins
+  let baitEwma = 0;
+  let baitWins = 0;
+  let baited = false;
   let myId: PlayerId = -1;
   let matchId = -1;
   const preBalances = new Map<PlayerId, number>();
@@ -115,6 +119,9 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     const nReal = view.config.players.filter((p) => !p.isSim).length;
     share = Math.max(params.minWinShare, Math.min(params.maxWinShare, nReal <= 1 ? 0.8 : 1 / nReal));
     lastBid = 0;
+    baitEwma = 0;
+    baitWins = 0;
+    baited = false;
     packer.clearCache();
   };
 
@@ -146,22 +153,25 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     }
     const allSims = f.realOpponents === 0;
     // spend-down: inside the last endWindow useful auctions taper the reserve to 0 and raise κ_lo
-    const endT = p.endWindow > 0 ? Math.max(0, Math.min(1, 1 - futureUseful / p.endWindow)) : 0;
+    const greedy = !baited && view.config.players.length >= p.greedMinSeats;
+    const endT = greedy && p.endWindow > 0 ? Math.max(0, Math.min(1, 1 - futureUseful / p.endWindow)) : 0;
     const kappaHi = allSims ? Math.max(p.kappaHi, p.kappaHiSims) : p.kappaHi;
+    const kLo = greedy ? p.kappaLo : p.calmKappaLo;
     const pacing = solveKappa({
       values,
       floors,
       counts,
       fieldCdf: cdfs,
       balance,
-      reserve: p.reserve * (1 - endT),
-      incomeShare: allSims ? p.incomeShareSims : p.incomeShare,
+      reserve: (greedy ? p.reserve : p.calmReserve) * (1 - endT),
+      incomeShare: allSims ? p.incomeShareSims : greedy ? p.incomeShare : p.calmIncomeShare,
       auctionType: view.config.auctionType,
-      kappaLo: Math.min(kappaHi, p.kappaLo + endT * Math.max(0, p.endKappaLo - p.kappaLo)),
+      kappaLo: Math.min(kappaHi, kLo + endT * Math.max(0, p.endKappaLo - kLo)),
       kappaHi,
     });
     if (p.lambdaScale !== 1) pacing.kappa /= p.lambdaScale;
-    if (p.earlyScale !== 1 && !allSims) {
+    if (baited && !allSims) pacing.kappa *= p.baitShade;
+    if (greedy && p.earlyScale !== 1 && !allSims) {
       const prog = auction.index / Math.max(1, T);
       const ramp = prog <= p.earlyUntil ? 0 : Math.min(1, (prog - p.earlyUntil) / Math.max(1e-6, p.rampEnd - p.earlyUntil));
       pacing.kappa *= p.earlyScale + (1 - p.earlyScale) * ramp;
@@ -439,8 +449,16 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     decideQuick(view, auction, ctx) {
       return decideImpl(view, auction, ctx, true);
     },
-    onAuctionClosed(_view, outcome: AuctionOutcome) {
+    onAuctionClosed(view, outcome: AuctionOutcome) {
       field?.observe(outcome, preBalances, lastBid, myId);
+      const p = params;
+      if (p && view.config.auctionType !== 'FirstPrice' && outcome.winnerId === myId && lastBid > 0) {
+        const r = Math.min(1, outcome.paid / lastBid);
+        baitEwma = baitWins === 0 ? r : (1 - p.baitAlpha) * baitEwma + p.baitAlpha * r;
+        baitWins++;
+        if (!baited && baitWins >= p.baitMinWins && baitEwma >= p.baitRatio) baited = true;
+        else if (baited && baitEwma < p.baitRatio - p.baitHyst) baited = false;
+      }
     },
   };
   return policy;

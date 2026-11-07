@@ -71,6 +71,20 @@ export interface BawtParams {
   earlyScale: number;
   earlyUntil: number;
   rampEnd: number;
+  /** Greedybot-bait guard. Greedy pacing (reserve, incomeShare, kappaLo, endWindow, earlyScale above) is used
+   *  only with >= greedMinSeats players and while not baited. Baited (Vickrey only) = EWMA of
+   *  paid/ourBid over our wins >= baitRatio after baitMinWins wins (a shadow is pricing us at our
+   *  own bid); released below baitRatio - baitHyst. Greed off -> calm* pacing, and while baited
+   *  κ is also scaled by baitShade so the pusher overshoots onto letters it does not want. */
+  greedMinSeats: number;
+  baitRatio: number;
+  baitHyst: number;
+  baitMinWins: number;
+  baitAlpha: number;
+  baitShade: number;
+  calmReserve: number;
+  calmIncomeShare: number;
+  calmKappaLo: number;
 
   // ---------------------------------------------------------------- floor (§11 HYB)
   floorA: number;
@@ -179,6 +193,15 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   earlyScale: 1,
   earlyUntil: 0.5,
   rampEnd: 0.75,
+  greedMinSeats: 0,
+  baitRatio: 2,
+  baitHyst: 0.1,
+  baitMinWins: 4,
+  baitAlpha: 0.3,
+  baitShade: 1,
+  calmReserve: 15,
+  calmIncomeShare: 0.35,
+  calmKappaLo: 0.6,
   floorA: 2.5,
   floorB: 3.5,
   vowelCap: 0.4,
