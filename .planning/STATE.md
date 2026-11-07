@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-11-07)
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation & Word Engine)
-Plan: 0 of 3 in current phase
-Status: Ready to execute
-Last activity: 2026-11-07 — Project initialized (research, requirements, roadmap)
+Phase: 3 of 5 (Strategy Brain & Opponent Zoo)
+Plan: 0 of 2 in current phase
+Status: Ready to execute (phase 2 verifying)
+Last activity: 2026-11-07 — Phase 1 verified+pushed; phase 2 executed (322 tests green)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 

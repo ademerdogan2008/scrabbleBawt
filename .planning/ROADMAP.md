@@ -10,7 +10,7 @@ Build the engine and shared interfaces first, then three independent infrastruct
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Foundation & Word Engine** - Repo toolchain, exact rules core, dictionary/anagram index, optimal word packer, match-state tracker
+- [x] **Phase 1: Foundation & Word Engine** - Repo toolchain, exact rules core, dictionary/anagram index, optimal word packer, match-state tracker
 - [ ] **Phase 2: Infrastructure (Simulator, History, Live Client)** - Three parallel streams: rules-exact simulator + benchmark harness; historical data pipeline + validation; SpacetimeDB client + shadow mode + local E2E harness
 - [ ] **Phase 3: Strategy Brain & Opponent Zoo** - Bawt v1 (opponent models, MC valuation, paced bidding, word cashing, endgame, defenses) in parallel with clones and trick bots
 - [ ] **Phase 4: Evaluate, Tune & Iterate** - Benchmark suite, loss analysis, paired-seed tuning, reasoned improvement rounds until plateau
@@ -29,9 +29,9 @@ Build the engine and shared interfaces first, then three independent infrastruct
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: Repo skeleton, toolchain (spacetimedb 2.12.0, vitest, tsx), vendored wordlist + bindings, `src/core` (letters, rack, rng, types)
-- [ ] 01-02: `src/engine` — dictionary, anagram-class trie, word enumeration, exact + fast packers, benchmarks
-- [ ] 01-03: `src/state` — MatchTracker / MatchView with inference of hidden tiles and unseen pool
+- [x] 01-01: Repo skeleton, toolchain (spacetimedb 2.12.0, vitest, tsx), vendored wordlist + bindings, `src/core` (letters, rack, rng, types)
+- [x] 01-02: `src/engine` — dictionary, anagram-class trie, word enumeration, exact + fast packers, benchmarks
+- [x] 01-03: `src/state` — MatchTracker / MatchView with inference of hidden tiles and unseen pool
 
 ### Phase 2: Infrastructure (Simulator, History, Live Client)
 **Goal**: Everything needed to measure and to play: a rules-exact parallel simulator with baselines and stats, the historical dataset with validation and priors, and a working live client with shadow mode and a local-server E2E harness.
@@ -98,8 +98,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 (plans inside a phase
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Word Engine | 0/3 | Not started | - |
-| 2. Infrastructure | 0/4 | Not started | - |
+| 1. Foundation & Word Engine | 3/3 | Complete | 2026-11-07 |
+| 2. Infrastructure | 4/4 | Executed (verifying) | - |
 | 3. Strategy Brain & Opponent Zoo | 0/2 | Not started | - |
 | 4. Evaluate, Tune & Iterate | 0/2 | Not started | - |
 | 5. E2E Validation & Release | 0/2 | Not started | - |
