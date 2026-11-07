@@ -103,6 +103,12 @@ export interface Policy {
   decide(view: MatchView, auction: AuctionInfo, ctx: DecideContext): Decision;
   onAuctionClosed?(view: MatchView, outcome: AuctionOutcome): void;
   onMatchEnd?(view: MatchView): void;
+  /**
+   * SIMULATOR-ONLY threat modelling: seats flagged `oracle` receive every player's true rack before
+   * each decide(), emulating rivals that reconstruct hidden deals via the server RNG flaw.
+   * Our own bot never implements this (fair-play decision in PROJECT.md).
+   */
+  onOracle?(trueRacks: ReadonlyMap<PlayerId, Rack>): void;
 }
 
 export type PolicyFactory = (seed: number, opts?: Record<string, unknown>) => Policy;
