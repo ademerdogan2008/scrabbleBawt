@@ -12,6 +12,12 @@ import { dirname } from 'node:path';
 import type { MatchSpec } from '../src/sim/match.js';
 import type { LabelStats, PairedTest } from '../src/sim/stats.js';
 import { comparePaired, runTournament } from '../src/sim/tournament.js';
+import { LINEUPS } from '../src/bots/lineups.js';
+
+interface ZooLineup {
+  readonly seats: readonly string[];
+  readonly spec?: Readonly<Partial<MatchSpec>>;
+}
 
 interface Args {
   matches: number;
@@ -63,7 +69,7 @@ interface PairBench {
 }
 type Bench = TourBench | PairBench;
 
-function benches(focal: string, lineups: Record<string, string[]>): Bench[] {
+function benches(focal: string, lineups: Record<string, ZooLineup>): Bench[] {
   const F = focal;
   const out: Bench[] = [
     { kind: 'tour', name: 'lobbySims', lineup: [F, ...SIMS5] },
@@ -80,7 +86,7 @@ function benches(focal: string, lineups: Record<string, string[]>): Bench[] {
     { kind: 'tour', name: 'tableProxyFP', lineup: [F, 'bawt-static', 'bawt-k13', 'bawt-quick', 'greedy', 'hoarder'], spec: { auctionType: 'FirstPrice' } },
   ];
   for (const [name, l] of Object.entries(lineups)) {
-    out.push({ kind: 'tour', name: `zoo:${name}`, lineup: l.map((s) => (s === '*' ? F : s)) });
+    out.push({ kind: 'tour', name: `zoo:${name}`, lineup: l.seats.map((s) => (s === '*' ? F : s)), spec: l.spec });
   }
   // paired ablations (A = focal)
   const tLobby = ['*', 'bawt-static', 'greedy', 'hoarder', 'sim:Aggressive', 'sim:ValueBidder'];
@@ -125,14 +131,7 @@ function tourRow(name: string, s: LabelStats[], focalLabel: string, wallMs: numb
 
 async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
-  let lineups: Record<string, string[]> = {};
-  try {
-    const modPath = '../src/bots/lineups.js';
-    const mod = (await import(modPath)) as { lineups?: Record<string, string[]> };
-    if (mod.lineups) lineups = mod.lineups;
-  } catch {
-    // 03-02 not merged yet
-  }
+  const lineups: Record<string, ZooLineup> = LINEUPS;
   const all = benches(args.focal, lineups).filter((b) => !args.only || args.only.has(b.name) || [...args.only].some((o) => b.name.startsWith(o)));
   const spec: Partial<MatchSpec> = { decisionBudgetMs: args.budget };
   const results: unknown[] = [];
