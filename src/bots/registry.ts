@@ -1,7 +1,8 @@
 // Policy registry: name -> PolicyFactory, merged from each bots/* directory's own index so that
 // later plans only edit their own directory. Spec grammar:
-//   policy seat : <name>            e.g. "greedy"
+//   policy seat : <name>            e.g. "greedy", "clone:lucent" (names may contain ':')
 //                 <name>:<json>     e.g. 'hoarder:{"lateFactor":2}'   (JSON object = factory opts)
+//                 <family>:<arg>    e.g. "profile:Waupus" -> the 'profile:*' factory with opts.arg
 //                 oracle:<spec>     same, with SIMULATOR-ONLY oracle racks (threat modelling)
 //   sim seat    : sim:<Strategy>    e.g. "sim:Aggressive" (Cheapskate|ValueBidder|Aggressive|Human)
 import { parseSimStrategy } from '../core/simbots.js';
@@ -32,14 +33,25 @@ const REGISTRY: ReadonlyMap<string, PolicyFactory> = (() => {
   return m;
 })();
 
+/** Concrete policy names (wildcard families such as 'profile:*' are listed by listFamilies). */
 export function listPolicies(): string[] {
-  return [...REGISTRY.keys()].sort();
+  return [...REGISTRY.keys()].filter((k) => !k.endsWith(':*')).sort();
 }
 
+/** Wildcard families: '<prefix>:*' resolves '<prefix>:<arg>' with opts.arg = <arg>. */
+export function listFamilies(): string[] {
+  return [...REGISTRY.keys()].filter((k) => k.endsWith(':*')).sort();
+}
+
+/** Params start at the first ':' followed by '{' (names themselves may contain ':'). */
 function splitSpec(spec: string): { name: string; opts?: Record<string, unknown> } {
   const s = spec.trim();
-  const colon = s.indexOf(':');
-  if (colon < 0) return { name: s };
+  const m = /:\s*\{/.exec(s);
+  const colon = m ? m.index : -1;
+  if (colon < 0) {
+    if (s.endsWith(':')) throw new Error(`registry: params of '${s.slice(0, -1)}' must be a JSON object, got ''`);
+    return { name: s };
+  }
   const name = s.slice(0, colon).trim();
   const raw = s.slice(colon + 1).trim();
   let opts: unknown;
@@ -58,8 +70,16 @@ function splitSpec(spec: string): { name: string; opts?: Record<string, unknown>
 export function createPolicy(spec: string, seed: number): Policy {
   const { name, opts } = splitSpec(spec);
   const factory = REGISTRY.get(name);
-  if (!factory) throw new Error(`registry: unknown policy '${name}' (known: ${listPolicies().join(', ')})`);
-  return factory(seed, opts);
+  if (factory && !name.endsWith(':*')) return factory(seed, opts);
+  const colon = name.lastIndexOf(':');
+  if (colon > 0) {
+    const family = REGISTRY.get(`${name.slice(0, colon)}:*`);
+    const arg = name.slice(colon + 1).trim();
+    if (family && arg.length > 0) return family(seed, { ...opts, arg });
+  }
+  throw new Error(
+    `registry: unknown policy '${name}' (known: ${listPolicies().join(', ')}; families: ${listFamilies().join(', ')})`,
+  );
 }
 
 /** Parse a lineup entry into a seat template (add an `id` to get a SeatSpec). */
