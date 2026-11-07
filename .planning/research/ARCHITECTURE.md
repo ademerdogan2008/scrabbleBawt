@@ -26,7 +26,7 @@ src/
     packer.ts           packExact(rack,opts) → {score, words}; packFast(rack) (bounded/approx); LRU memo
   state/
     tracker.ts          MatchTracker: applies public events → MatchView (used by sim AND live)
-    view.ts             MatchView / PlayerState interfaces + derived helpers (unseen pool, known racks)
+    view.ts             helpers over MatchView (interfaces live in core/types.ts to avoid a core→state cycle)
   sim/                  deterministic simulator + evaluation harness
     match.ts            runMatch(spec, seats, seed) → MatchResult (+ optional trace)
     serverSims.ts       exact replicas of module sim bots (bid w/ jitter, longest>=3 word on win)
@@ -112,7 +112,7 @@ export type PolicyFactory = (seed: number, opts?: Record<string, unknown>) => Po
 
 `decide()` must be callable more than once per auction (live anytime re-bid: a quick call with a tiny budget, then a refined call); it must not double-count words already submitted (the tracker reflects them).
 
-## MatchView (`src/state/view.ts`)
+## MatchView (interfaces in `src/core/types.ts`; tracker + helpers in `src/state/`)
 
 ```ts
 export interface PlayerState {
