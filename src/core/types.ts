@@ -14,8 +14,12 @@ export interface PlayerInfo {
   simStrategy?: SimStrategy; // only when isSim
 }
 
+/** What the match counts for (RULES.md §11): objectives differ by kind. */
+export type MatchKind = 'lobby' | 'swiss' | 'bracket' | 'final' | 'unknown';
+
 export interface MatchConfig {
   matchId: number;
+  kind?: MatchKind; // default 'lobby'; tournament phase when known
   auctionType: AuctionType;
   auctionDurationMs: number; // default 1000 (range 250..10000)
   startingRackSize: number; // default 5 (range 0..20)

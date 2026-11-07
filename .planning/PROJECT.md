@@ -56,7 +56,10 @@ Win matches: maximize final placement against strong real bots (tournament table
 | Strict per-directory ownership for parallel agents | Clean commits, no merge conflicts | — Pending |
 | Per-phase git branches merged into main, pushed after verification | User asked for clean history + periodic pushes | — Pending |
 | Defend against (not exploit) the spectator top-bid leak | Fair play; assume rivals may see our winning bids live | — Pending |
-| Live token supplied later by the user via git-ignored .env | Needs user's spacetimedb.com login | — Pending |
+| Live token supplied by the user via git-ignored .env (present since 2026-11-07, chmod 600) | Needs user's spacetimedb.com login | — Pending |
+| Do NOT exploit the timestamp-seeded server RNG (RULES.md §4: hidden deals + sim jitters computable) — treat it as a threat model only | Reading private state through an implementation weakness is not fair play; assume rivals may know our 5 hidden tiles and sims' exact bids | — Pending |
+| Simulator uses independent seeded streams (bag/draws, sim jitter, tie-breaks) instead of the host RNG | Distributionally identical; gives perfectly paired letter sequences across policy variants for low-variance tuning | — Pending |
+| Tournament-phase-aware objectives (Swiss: placement points; Bracket: avoid last place; Final: 3-game score sum) | RULES.md §11: objectives differ by phase | — Pending |
 
 ## Evolution
 
