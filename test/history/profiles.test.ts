@@ -51,18 +51,23 @@ describe('data/profiles.json (generated from the full dataset)', () => {
   });
 
   it('survival curves are monotone non-increasing probabilities of length 60', () => {
+    const bad: string[] = [];
+    let curves = 0;
     for (const b of P.bots) {
       for (const g of GROUPS) {
         for (const c of [...PHASES.map((p) => b.bidCurves[g][p]), b.bidCurvesAllPhases[g]]) {
-          expect(c.pGe).toHaveLength(BID_X_MAX);
+          curves++;
+          if (c.pGe.length !== BID_X_MAX) bad.push(`${b.name}/${g}: length ${c.pGe.length}`);
           for (let i = 0; i < c.pGe.length; i++) {
-            expect(c.pGe[i]).toBeGreaterThanOrEqual(0);
-            expect(c.pGe[i]).toBeLessThanOrEqual(1);
-            if (i > 0) expect(c.pGe[i]!).toBeLessThanOrEqual(c.pGe[i - 1]!);
+            const p = c.pGe[i]!;
+            if (!(p >= 0 && p <= 1)) bad.push(`${b.name}/${g}: pGe[${i}] = ${p}`);
+            if (i > 0 && p > c.pGe[i - 1]!) bad.push(`${b.name}/${g}: increases at x=${i + 1}`);
           }
         }
       }
     }
+    expect(curves).toBe(P.bots.length * GROUPS.length * (PHASES.length + 1));
+    expect(bad).toEqual([]);
   });
 
   it("detects Bron's hard cap of 30 on J/X/Q/Z and its penultimate all-in habit", () => {
