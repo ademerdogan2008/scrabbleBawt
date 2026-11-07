@@ -115,8 +115,8 @@ export const LALA_DEFAULTS: Readonly<LalaParams> = Object.freeze({
   starveMinLen: 7,
   priceN0: 8,
   shadeSigma: 0.35,
-  pairTop: 6,
-  wordCandidates: 6,
+  pairTop: 5,
+  wordCandidates: 5,
 });
 
 /** P(Poisson(lambda) >= k). */

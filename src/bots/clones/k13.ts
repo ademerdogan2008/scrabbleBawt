@@ -11,14 +11,16 @@
 //
 // Simplified (compute budget, decide p99 < 50 ms):
 //   * P(rack) = fast packing (greedy + 16-word first-word beam) instead of top-12 + greedy.
-//   * Samples: 6 for the open letter (K-13: 8 quick), 2 per letter for the λ table (cached per
-//     rack), 3 for play-vs-hold over the top 4 candidates; k capped at kCap = 6 (K-13: 13).
+//   * Samples: 6 for the open letter (K-13: 8 quick), 2 per letter for the λ table (recomputed
+//     only when the rack changes), 3 for play-vs-hold over the top 4 candidates; k capped at
+//     kCap = 6 (K-13: 13) and so that sampled racks stay <= mcRackCap = 16 tiles.
+//   * Hoard valve (not in K-13): at >= 16 tiles it cashes best-partition words down to 11.
 //   * The λ table's rival CDFs use the generic prior at the current phase (no phaseF shift).
 //   * Rival "cut" = P(rival outbids b) x max(0, b - median max of the other bids): price-driving
 //     only, no separate denial term.
 //   * PIT calibration uses our wins (paid = max rival bid) and losses where the price exceeded our
 //     bid (paid = second-highest rival bid).
-import { NUM_LETTERS, VALUE } from '../../core/letters.js';
+import { NUM_LETTERS, VALUE, wordReward } from '../../core/letters.js';
 import { rackKey, type Rack } from '../../core/rack.js';
 import type { Rng } from '../../core/rng.js';
 import { simBidDistribution } from '../../core/simbots.js';
@@ -52,6 +54,9 @@ export interface K13Params {
   playMargin: number;
   maxPlays: number;
   lastTileDeny: boolean;
+  mcRackCap: number;
+  hoardCap: number;
+  hoardKeep: number;
 }
 
 export const K13_DEFAULTS: Readonly<K13Params> = Object.freeze({
@@ -81,6 +86,9 @@ export const K13_DEFAULTS: Readonly<K13Params> = Object.freeze({
   playMargin: 2.7,
   maxPlays: 3,
   lastTileDeny: true,
+  mcRackCap: 16,
+  hoardCap: 16,
+  hoardKeep: 11,
 });
 
 /** Multiset of the pool as a flat letter list. */
@@ -243,10 +251,22 @@ export const createK13: PolicyFactory = (_seed, opts) => {
       const pool = view.unseen;
       const list = poolList(pool);
       const price = wins > 0 ? spent / wins : p.kInitPrice;
-      const k =
+      const kRaw =
         B === 1 ? 0 : clamp(p.futureScale * Math.min(p.maxWinShare * future, t.balance / Math.max(1, price)), 0, Math.min(p.kCap, future));
+      // compute guard: sampled racks stay <= mcRackCap tiles (packing cost grows fast with size)
+      const k = Math.min(kRaw, Math.max(B === 1 ? 0 : 1, p.mcRackCap - rackSize(t.rack)));
       const firstPrice = view.config.auctionType === 'FirstPrice';
 
+      // ---- compute guard: a hoard of >= hoardCap tiles cashes its best partition words (largest
+      // first) down to hoardKeep tiles. With coins non-binding (λ at its floor) K-13's play rule
+      // never fires, and heads-up against a weak rival the rack grows to 40+ tiles.
+      if (rackSize(t.rack) >= p.hoardCap) {
+        const words = [...partition(t.rack).words].sort((a, b) => wordReward(b) - wordReward(a));
+        for (const w of words) {
+          if (rackSize(t.rack) < p.hoardKeep) break;
+          t.play(w);
+        }
+      }
       // ---- play vs hold on shared futures (B == 1: k = 0, i.e. the exact current rack)
       {
         const F = B === 1 ? [new Uint8Array(NUM_LETTERS)] : drawFutures(list, k, p.playSamples, rng);
@@ -302,16 +322,17 @@ export const createK13: PolicyFactory = (_seed, opts) => {
 
       // ---- λ by bisection over the remaining auctions (cached letter values per rack)
       if (future > 0) {
-        const kInt = Math.round(k);
-        const key = `${rackKey(t.rack)}|${kInt}`;
+        // letter values for the λ equation: refreshed only when the rack changes
+        const key = rackKey(t.rack);
         let vals = tableCache.get(key);
         if (!vals) {
-          const F = drawFutures(list, kInt, p.tableSamples, rng);
+          const F = drawFutures(list, Math.round(k), p.tableSamples, rng);
+          const base = F.map((f) => P(addRacks(t.rack, f)));
           vals = new Array<number>(NUM_LETTERS).fill(0);
           for (let i = 0; i < NUM_LETTERS; i++) {
             if (pool[i]! === 0) continue;
             let s = 0;
-            for (const f of F) s += P(addRacks(rackPlus(t.rack, i), f)) - P(addRacks(t.rack, f));
+            F.forEach((f, j) => (s += P(addRacks(rackPlus(t.rack, i), f)) - base[j]!));
             vals[i] = Math.max(0, s / F.length);
           }
           if (tableCache.size > 256) tableCache.clear();

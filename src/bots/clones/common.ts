@@ -139,9 +139,17 @@ export interface PartitionOpts {
   nodeLimit?: number;
 }
 
-/** Exact best partition (bounded): disjoint words maximizing total reward. */
+/** Above this many tiles partition() uses the fast packer (enumeration alone gets slow). */
+export const EXACT_MAX_TILES = 24;
+
+/**
+ * Best partition, bounded: exact branch & bound (node + time limit) up to EXACT_MAX_TILES tiles,
+ * the fast greedy + beam packer above (a 40-60 tile hoard would otherwise cost 100+ ms just to
+ * enumerate its fitting classes). Always a valid set of disjoint words.
+ */
 export function partition(rack: Rack, opts: PartitionOpts = {}): PackResult {
   const { packer } = getEngine();
+  if (rackSize(rack) > EXACT_MAX_TILES) return packer.packFast(rack, { minLen: opts.minLen ?? 2 });
   return packer.packExact(rack, {
     minLen: opts.minLen ?? 2,
     nodeLimit: opts.nodeLimit ?? NODE_LIMIT,
