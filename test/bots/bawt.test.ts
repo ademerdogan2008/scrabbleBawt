@@ -8,7 +8,7 @@ import { MatchTracker } from '../../src/state/tracker.js';
 import { createPolicy, listPolicies, parseSeat } from '../../src/bots/registry.js';
 import { runMatch, type SeatSpec } from '../../src/sim/match.js';
 import { createBawt, policies } from '../../src/bots/bawt/index.js';
-import { firstPriceBid, makeBid } from '../../src/bots/bawt/bidding.js';
+import { drivingBid, firstPriceBid, makeBid, rivalSurplus } from '../../src/bots/bawt/bidding.js';
 import { wordsWithoutLetter } from '../../src/bots/bawt/endgame.js';
 import { winProb } from '../../src/bots/bawt/opponents.js';
 
@@ -123,6 +123,23 @@ describe('bidding', () => {
       expect((v - b) * winProb(G, b)).toBeCloseTo(best, 9);
     }
     expect(firstPriceBid(G, 10, 3)).toBeLessThanOrEqual(3);
+  });
+
+  it('price-driving: bids just under a deterministic rival on letters it does not need', () => {
+    const s = 9; // rival always bids 9, no sims
+    const Greal = Float64Array.from({ length: 40 }, (_, x) => (x >= s ? 1 : 0));
+    const Gsim = new Float64Array(40).fill(1);
+    expect(rivalSurplus(Greal, Gsim, 0)).toBeCloseTo(s - 1); // pays the reserve 1
+    expect(rivalSurplus(Greal, Gsim, 6)).toBeCloseTo(s - 6);
+    expect(rivalSurplus(Greal, Gsim, 12)).toBe(0);
+    // low value: drive to s - 1 (rival pays 8 instead of 1)
+    expect(drivingBid(Greal, Greal, Gsim, 3, 1, 20)).toBe(s - 1);
+    // value above the rival's bid: win
+    expect(drivingBid(Greal, Greal, Gsim, 12, 1, 20)).toBeGreaterThan(s);
+    // capped by maxOverbid over the selfish bid
+    expect(drivingBid(Greal, Greal, Gsim, 3, 1, 5)).toBe(5);
+    // no weight: plain truthful optimum (never above value)
+    expect(drivingBid(Greal, Greal, Gsim, 3, 0, 20)).toBeLessThanOrEqual(3);
   });
 
   it('denial adds at most maxOverbid coins', () => {

@@ -5,6 +5,11 @@
 //   denial  = min(maxOverbid, w·V̂_rival·κ) when the predicted price is below (V̂ + w·V̂_rival)·κ
 //             and pacing allows (κ >= 1)
 //   bid     = clamp(⌊(selfish + denial)·(1 ± noise)⌋ ± jitter + tieNudge, 0, B)
+// With a rank-relevant real rival (w > 0) the bid instead maximises the K-13 style utility
+//   U(b) = E[(v - pay)·1{win}] - w·E[rival surplus | b],  b <= selfish + maxOverbid,
+// where the rival's surplus (its bid minus the price it pays, price = max(our bid, sims, 1)) falls
+// as we raise a losing bid (price-driving) or take the letter (denial). Against a static price
+// setter this bids just under its price on letters we do not need, which drains it.
 //   shaping: focal caps (rival modal cap c, bid c+1 when our value reaches c-2), and when every
 //   competitor's max possible bid is known (sims, broke seats) never bid above that max + 1
 //   (same price, less information leaked through the spectator view).
@@ -26,6 +31,9 @@ export interface BidInput {
   maxOverbid: number;
   /** Field max-bid CDF for the open letter. */
   G: Float64Array;
+  /** Max-bid CDFs of the real rivals and of the sims (for the price-driving utility). */
+  Greal?: Float64Array;
+  Gsim?: Float64Array;
   balance: number;
   /** Max possible competing bid when known exactly. */
   knownMax: number | undefined;
@@ -60,6 +68,43 @@ export function firstPriceBid(G: Float64Array, valueCoins: number, balance: numb
   return best;
 }
 
+const at = (G: Float64Array, x: number): number => (x < 0 ? 0 : x >= G.length ? 1 : G[x]!);
+
+/** E[rival surplus] when we bid b: Σ_m P_R(m) Σ_{x = max(b,1)}^{m-1} P(max(sims) <= x). */
+export function rivalSurplus(Greal: Float64Array, Gsim: Float64Array, b: number): number {
+  const lo = Math.max(b, 1);
+  let s = 0;
+  let cum = 0; // Σ_{x=lo}^{m-1} Gsim(x)
+  for (let m = lo + 1; m < Greal.length + 1; m++) {
+    cum += at(Gsim, m - 1);
+    const pm = at(Greal, m) - at(Greal, m - 1);
+    if (pm > 0) s += pm * cum;
+  }
+  return s;
+}
+
+/** Selfish Vickrey utility E[(v - pay)·1{win}] of bid b (two-way tie approximation). */
+export function vickreyUtility(G: Float64Array, v: number, b: number): number {
+  if (b <= 0) return 0;
+  let u = at(G, 0) * (v - 1);
+  for (let m = 1; m < b; m++) u += (at(G, m) - at(G, m - 1)) * (v - m);
+  return u + 0.5 * (at(G, b) - at(G, b - 1)) * (v - b);
+}
+
+/** argmax_b vickreyUtility - w·rivalSurplus over b in [0, cap] (lowest b on ties). */
+export function drivingBid(G: Float64Array, Greal: Float64Array, Gsim: Float64Array, v: number, w: number, cap: number): number {
+  let best = 0;
+  let bestU = -w * rivalSurplus(Greal, Gsim, 0);
+  for (let b = 1; b <= cap; b++) {
+    const u = vickreyUtility(G, v, b) - w * rivalSurplus(Greal, Gsim, b);
+    if (u > bestU + 1e-9) {
+      bestU = u;
+      best = b;
+    }
+  }
+  return best;
+}
+
 export function makeBid(inp: BidInput): BidResult {
   const B = Math.max(0, Math.floor(inp.balance));
   const selfish = Math.max(0, Math.max(inp.value * inp.kappa, inp.floor));
@@ -80,6 +125,12 @@ export function makeBid(inp: BidInput): BidResult {
     return { bid: b, selfish, denial, reason: 'firstPrice' };
   }
 
+  if (inp.denyWeight > 0 && inp.Greal && inp.Gsim) {
+    const cap = Math.min(B, Math.floor(selfish) + Math.max(0, Math.floor(inp.maxOverbid)));
+    let b = drivingBid(inp.G, inp.Greal, inp.Gsim, selfish, inp.denyWeight, cap);
+    if (inp.sureWinCap && inp.knownMax !== undefined && b > inp.knownMax + 1) b = inp.knownMax + 1;
+    return { bid: Math.max(0, Math.min(B, b)), selfish, denial: Math.max(0, b - selfish), reason: b > selfish ? 'drive' : 'eu' };
+  }
   const target = selfish + denial;
   let raw = target;
   if (inp.bidNoise > 0) raw *= 1 + inp.bidNoise * (2 * inp.rng.float() - 1);

@@ -366,17 +366,19 @@ export class FieldModel {
     view: MatchView,
     li: number,
     index: number,
-    opts: { exclude?: PlayerId; balances?: ReadonlyMap<PlayerId, number> } = {},
+    opts: { exclude?: PlayerId; balances?: ReadonlyMap<PlayerId, number>; only?: 'real' | 'sim'; minLen?: number } = {},
   ): Float64Array {
     const phase = this.phase(index);
     let maxBal = 0;
     const bal = (o: OpponentModel) => Math.max(0, opts.balances?.get(o.id) ?? view.players.get(o.id)?.balance ?? 0);
-    for (const o of this.opponents) if (o.id !== opts.exclude) maxBal = Math.max(maxBal, bal(o));
-    const len = Math.min(this.scratch.length, Math.floor(maxBal) + 2);
+    const skip = (o: OpponentModel) =>
+      o.id === opts.exclude || (opts.only === 'real' && o.kind === 'sim') || (opts.only === 'sim' && o.kind !== 'sim');
+    for (const o of this.opponents) if (!skip(o)) maxBal = Math.max(maxBal, bal(o));
+    const len = Math.min(this.scratch.length, Math.max(opts.minLen ?? 0, Math.floor(maxBal) + 2));
     const G = new Float64Array(len).fill(1);
     const F = this.scratch.subarray(0, len);
     for (const o of this.opponents) {
-      if (o.id === opts.exclude) continue;
+      if (skip(o)) continue;
       o.cdfInto(F, li, phase, bal(o));
       for (let x = 0; x < len; x++) G[x]! *= F[x]!;
     }

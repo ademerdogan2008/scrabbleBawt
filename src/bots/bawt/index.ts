@@ -58,6 +58,10 @@ export interface BawtDiagnostics {
   quickOnly: number;
   mcSamples: number;
   kappaSum: number;
+  /** Σ V_mc and Σ V_table over MC decisions (bias check), and their count. */
+  mcValueSum: number;
+  tableValueSum: number;
+  mcDecisions: number;
   reasons: Record<string, number>;
   wordReasons: Record<string, number>;
 }
@@ -101,7 +105,7 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
   let myId: PlayerId = -1;
   let matchId = -1;
   const preBalances = new Map<PlayerId, number>();
-  const diagnostics: BawtDiagnostics = { decisions: 0, quickOnly: 0, mcSamples: 0, kappaSum: 0, reasons: {}, wordReasons: {} };
+  const diagnostics: BawtDiagnostics = { decisions: 0, quickOnly: 0, mcSamples: 0, kappaSum: 0, mcValueSum: 0, tableValueSum: 0, mcDecisions: 0, reasons: {}, wordReasons: {} };
 
   const start = (view: MatchView) => {
     params = resolveParams(view.config, overrides);
@@ -148,7 +152,7 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       fieldCdf: cdfs,
       balance,
       reserve: p.reserve,
-      incomeShare: p.incomeShare,
+      incomeShare: allSims ? p.incomeShareSims : p.incomeShare,
       auctionType: view.config.auctionType,
       kappaLo: p.kappaLo,
       kappaHi: allSims ? Math.max(p.kappaHi, p.kappaHiSims) : p.kappaHi,
@@ -187,7 +191,7 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       if (!r) continue;
       const nProj = view.config.startingRackSize + r.lettersWon + Math.max(0, auction.remainingAfter - 1) / seats;
       const v = tableValue(r.knownHeld, li, nProj, prep.pU, p.tableScale);
-      if (weight * v > best.weight * best.value) best = { value: v, weight };
+      if (weight * v > best.weight * best.value || (best.value === 0 && weight > best.weight)) best = { value: v, weight };
     }
     return best;
   };
@@ -205,6 +209,9 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     const f = field!;
     const G = f.fieldCdf(view, li, auction.index);
     const den = denial(view, auction, li, prep);
+    const drive = p.drive && den.weight > 0 && view.config.auctionType === 'Vickrey';
+    const Greal = drive ? f.fieldCdf(view, li, auction.index, { only: 'real' }) : undefined;
+    const Gsim = drive ? f.fieldCdf(view, li, auction.index, { only: 'sim', minLen: Greal!.length }) : undefined;
     const r = makeBid({
       auctionType: view.config.auctionType,
       value,
@@ -214,6 +221,8 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       denyWeight: den.weight,
       maxOverbid: p.maxOverbid,
       G,
+      Greal,
+      Gsim,
       balance: prep.balance,
       knownMax: f.knownFieldMax(view, li),
       focalCap: p.focalCaps ? f.focalCap(li) : undefined,
@@ -388,9 +397,14 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       const mc = mcMarginal(packer, rack, li, futures, lim, timeUp, 4, p.mcNodeBudget);
       diagnostics.mcSamples += mc.samples;
       if (mc.samples > 0) {
+        diagnostics.mcValueSum += mc.value;
+        diagnostics.tableValueSum += vTable;
+        diagnostics.mcDecisions++;
         if (p.mode === 'k13') value = mc.value;
         else {
-          const cover = expectedWins <= 0 ? 1 : Math.min(1, H / expectedWins);
+          const realSeats = view.config.players.filter((x) => !x.isSim).length;
+          const capped = expectedWins <= p.mcFullBelow || realSeats < p.mcCoverCapMinReal ? 1 : p.mcCoverCap;
+          const cover = expectedWins <= 0 ? 1 : Math.min(capped, H / expectedWins);
           value = cover * mc.value + (1 - cover) * vTable;
         }
       }

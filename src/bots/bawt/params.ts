@@ -30,6 +30,14 @@ export interface BawtParams {
   mcMaxLetters: number;
   /** Skip the MC (table only) when its blend weight cover = H / (f·share) is below this. */
   mcMinCover: number;
+  /**
+   * Max MC blend weight while the expected future wins exceed mcFullBelow (then cover may reach 1),
+   * applied only in fields with >= mcCoverCapMinReal real seats (measured: +19.0 pts [15.7, 22.2]
+   * in 6-real tables; −8.5 in sim-padded lobbies, where the uncapped blend wins).
+   */
+  mcCoverCap: number;
+  mcCoverCapMinReal: number;
+  mcFullBelow: number;
   /** packExact node limit inside the MC (deterministic); packTimeMs is only a safety net. */
   mcNodeLimit: number;
   /** Deterministic work cap per decision: stop sampling after this many search nodes (>= 4 samples). */
@@ -49,6 +57,8 @@ export interface BawtParams {
   reserve: number;
   /** Share of expected future word rewards counted as spendable income. */
   incomeShare: number;
+  /** incomeShare when every competitor is a sim (we cash nearly every letter we buy). */
+  incomeShareSims: number;
   /** Scale on 1/κ (λ) for the K-13 style path. */
   lambdaScale: number;
 
@@ -67,6 +77,8 @@ export interface BawtParams {
   denyWeights: Record<string, number>;
   /** Max coins the denial term may add over the selfish bid. */
   maxOverbid: number;
+  /** Vickrey: use the price-driving utility (selfish surplus - w·rival surplus) when w > 0. */
+  drive: boolean;
 
   // ---------------------------------------------------------------- bid shaping (§3.4, §10)
   /** +1 when the predicted tie mass at our bid is at least this. 0 disables. */
@@ -137,6 +149,9 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   mcHorizon: 12,
   mcMaxLetters: 16,
   mcMinCover: 0.35,
+  mcCoverCap: 0.25,
+  mcCoverCapMinReal: 5,
+  mcFullBelow: 6,
   mcNodeLimit: 3000,
   mcNodeBudget: 30000,
   packTimeMs: 15,
@@ -147,6 +162,7 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   kappaHiSims: 12,
   reserve: 15,
   incomeShare: 0.35,
+  incomeShareSims: 0.8,
   lambdaScale: 1,
   floorA: 2.5,
   floorB: 3.5,
@@ -155,6 +171,7 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   floorKappaScale: true,
   denyWeights: { '2': 1, '3': 0.4, '4': 0.2 },
   maxOverbid: 4,
+  drive: true,
   tieNudgeMinP: 0.05,
   jitter: 1,
   jitterBelow: 6,
