@@ -198,3 +198,27 @@ export function saveState(state: LearnState, path: string = defaultStatePath()):
   writeFileSync(tmp, `${JSON.stringify(state, null, 1)}\n`);
   renameSync(tmp, path);
 }
+
+/**
+ * Strict load for offline tools (the learn cycle): a missing or empty file yields a fresh state,
+ * but a corrupt file throws and is left untouched (never moved aside or overwritten).
+ */
+export function loadStateStrict(path: string = defaultStatePath()): LearnState {
+  if (!existsSync(path)) return emptyState();
+  const text = readFileSync(path, 'utf8');
+  if (text.trim().length === 0) return emptyState();
+  const state = normalizeState(JSON.parse(text));
+  if (!state) throw new Error(`learn state ${path}: unrecognised shape (expected version ${LEARN_VERSION})`);
+  return state;
+}
+
+/**
+ * Read-modify-write with no await in between (keeps the race window against the live client's
+ * own match-end save as small as possible). Uses the strict load: a corrupt file throws.
+ */
+export function updateState(path: string, fn: (s: LearnState) => void): LearnState {
+  const s = loadStateStrict(path);
+  fn(s);
+  saveState(s, path);
+  return s;
+}

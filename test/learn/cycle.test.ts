@@ -10,20 +10,12 @@ import { generateCandidates, steppable } from '../../src/learn/cycle/candidates.
 import { acquireLock, releaseLock, runCycle, watch, type CycleOptions } from '../../src/learn/cycle/cycle.js';
 import { diagnose, renderDiagnosis, type Diagnosis } from '../../src/learn/cycle/diagnose.js';
 import { decideGate, focalSpec, gateLineups, MIRROR, type EvalResults, type Evaluator, type FocalOutcome } from '../../src/learn/cycle/gate.js';
-import { averageRank, backfill, parseLogLines, summarizeMatch, type MatchSummary } from '../../src/learn/cycle/ingest.js';
-import { clampKnob, KNOBS, knobSpec, knobValues, paramsInBounds, PINNED_KNOBS, withKnobs } from '../../src/learn/cycle/knobs.js';
+import { averageRank, backfill, isLoss, parseLogLines, summarizeMatch, type MatchSummary } from '../../src/learn/cycle/ingest.js';
+import { clampKnob, KNOBS, knobSpec, knobValues, paramsInBounds, PINNED_KNOBS, withKnobs } from '../../src/learn/arms.js';
 import { mirrorLineup, specForPlayer } from '../../src/learn/cycle/mirror.js';
-import {
-  addArms,
-  banditUpdate,
-  emptyState,
-  incumbentArm,
-  loadState,
-  rewardOf,
-  saveState,
-  type Arm,
-  type LearnState,
-} from '../../src/learn/cycle/pool.js';
+import { addArms, incumbentArm, updateArm as banditUpdate } from '../../src/learn/bandit.js';
+import { rewardOf } from '../../src/learn/reward.js';
+import { emptyState, loadStateStrict as loadState, saveState, type Arm, type LearnState } from '../../src/learn/store.js';
 
 // ------------------------------------------------------------------------------- fixtures
 
@@ -124,9 +116,9 @@ describe('ingest', () => {
   it('averages tied ranks and maps them to a reward in [0,1]', () => {
     expect(averageRank([10, 10, 5], 10)).toBe(1.5);
     expect(averageRank([10, 20, 20, 5], 10)).toBe(4 - 1);
-    expect(rewardOf(6, 1)).toBe(1);
+    expect(rewardOf(1, 6)).toBe(1);
     expect(rewardOf(6, 6)).toBe(0);
-    expect(rewardOf(4, 2.5)).toBeCloseTo(0.5);
+    expect(rewardOf(2.5, 4)).toBeCloseTo(0.5);
   });
 
   it('backfills only logs older than the grace period, once', () => {
@@ -138,6 +130,42 @@ describe('ingest', () => {
     expect(s.matches).toHaveLength(1);
     expect(s.arms[0]!.plays).toBe(1);
     expect(s.arms[0]!.alpha).toBeCloseTo(1.5);
+  });
+});
+
+// ------------------------------------------------------------- merged live/offline contract
+
+describe('live/offline contract', () => {
+  it('does not backfill a match we never played in (no decisions), like the live learner', () => {
+    const text = syntheticLog(779)
+      .split('\n')
+      .filter((l) => !l.includes('"k":"decision"') && !l.includes('"k":"submit"'))
+      .join('\n');
+    const sum = summarizeMatch(parseLogLines(text).records)!;
+    expect(sum.decisions).toBe(0);
+    const s = emptyState();
+    expect(backfill(s, [sum], new Map([[779, 0]]), 1e12, 1)).toEqual([]);
+    expect(summary().decisions).toBe(7);
+  });
+
+  it('counts a shared top score as neither a win nor a loss', () => {
+    expect(isLoss({ rank: 1.5, won: false, score: 10, bestOtherScore: 10 })).toBe(false);
+    expect(isLoss({ rank: 2, won: false, score: 9, bestOtherScore: 10 })).toBe(true);
+    expect(isLoss({ rank: 1, won: true, score: 11, bestOtherScore: 10 })).toBe(false);
+  });
+
+  it('plays cycle arms through bawt-arm (LEARNABLE vocabulary only)', () => {
+    expect(focalSpec({})).toBe('bawt');
+    expect(focalSpec({ denyScale: 0.8 })).toBe('bawt-arm:{"denyScale":0.8}');
+    expect(() => createPolicy('bawt-arm:{"denyScale":0.8,"tableScale":1.1}', 1)).not.toThrow();
+    expect(() => createPolicy('bawt-arm:{"mcSamples":3}', 1)).toThrow(/not a learnable knob/);
+  });
+
+  it('strict load leaves a corrupt state file untouched', () => {
+    const p = join(tmp(), 'state.json');
+    writeFileSync(p, '{"version":1,"arms":');
+    expect(() => loadState(p)).toThrow();
+    expect(readFileSync(p, 'utf8')).toBe('{"version":1,"arms":');
   });
 });
 
@@ -184,10 +212,11 @@ describe('candidates', () => {
       expect(clampKnob(k.name, Number.NaN)).toBe(k.base);
     }
     const p = withKnobs({ tableScale: 9, mcSamples: 64 }, { lambdaScale: 0.1, denyScale: 5 });
-    expect(p).toEqual({ tableScale: 1.3, lambdaScale: 0.7, denyWeights: { '2': 1.3, '3': 0.52, '4': 0.26 } });
+    expect(p).toEqual({ tableScale: 1.3, lambdaScale: 0.7, denyScale: 1.3 });
     expect(paramsInBounds(p)).toBe(true);
     expect(paramsInBounds({ mcSamples: 64 })).toBe(false);
     expect(paramsInBounds({ tableScale: 2 })).toBe(false);
+    expect(paramsInBounds({ denyWeights: { '2': 1 } })).toBe(false);
   });
 
   it('proposes 2-4 bounded candidates from an incumbent at the range edges', () => {
@@ -321,7 +350,7 @@ describe('pool', () => {
     expect(loadState(p).arms.map((a) => a.id)).toEqual(['default']);
     const s: LearnState = emptyState();
     s.arms = [arm('x', 2, 2)];
-    saveState(p, s);
+    saveState(s, p);
     const back = loadState(p);
     expect(back.arms.map((a) => a.id).sort()).toEqual(['default', 'x']);
     writeFileSync(p, '{not json');

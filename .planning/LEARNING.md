@@ -16,7 +16,8 @@ inside a live decision:
    or `LEARN_STATE`). A log counts only after its `match ended` record exists, and a half-written
    last line is skipped. If the client did not record a finished match (learning hook off), the
    cycle backfills it after a 120 s grace period and gives its arm the same bandit update.
-2. **Diagnose** each new lost match (rank > 1 and not a shared top score). The cycle reports who
+2. **Diagnose** each new lost match (strictly beaten: a shared top score is not a loss). Matches
+   where we made no decisions are never backfilled (the live learner skips them too). The cycle reports who
    won and how: bingos, letters won and price per letter against ours, unspent money, unplayed
    rack value, near misses on key letters, overpays, and cheap uncontested wins. It maps the
    evidence to hypothesis categories:
@@ -33,8 +34,9 @@ inside a live decision:
 3. **Candidates.** The incumbent is the eligible arm with the highest posterior mean. The cycle
    proposes 2-4 candidates from it: the combined diagnosed direction (1 step), the primary
    category alone (1 step), the combined direction at 2 steps, and one seeded random perturbation.
-   One step is 15% of the knob's range. Every value is clamped to its range
-   (`src/learn/cycle/knobs.ts`). Some knobs are set by a built-in profile: kappaHi, reserve,
+   One step is 15% of the knob's range. Every value is clamped to its range in the single
+   `LEARNABLE` whitelist (`src/learn/arms.ts`, shared with the live client); `denyScale` stays a
+   multiplier on the resolved profile's denyWeights. Some knobs are set by a built-in profile: kappaHi, reserve,
    floorA and floorB. An arm param overrides every profile, so the cycle moves these only when
    the incumbent already sets them. Otherwise their direction goes to a relative knob:
    kappaHi to lambdaScale, reserve to incomeShare, floors to tableScale.
@@ -44,7 +46,8 @@ inside a live decision:
    matches. LUCENT, Bron, maverick-bot, K-13, Lionel and other known bots map to their clones.
    Sims map to `sim:<Strategy>`. Profiled bots map to `profile:<Name>`, and anything else maps to
    `clone:fieldVolume`. Defaults: 200 seeds per lineup, 4 workers, 200 ms decision budget (the
-   same budget as the bench). The incumbent is simulated once and shared by all candidates. A
+   same budget as the bench). Arms are simulated as `bawt-arm:{params}`, which applies them through
+   the same `armOverrides` as the live wrapper. The incumbent is simulated once and shared by all candidates. A
    candidate passes when all of these hold:
    - the pooled rank delta (candidate - incumbent) has a 95% CI upper bound <= 0.05;
    - no lineup is significantly worse (per-lineup CI lower bound <= 0);

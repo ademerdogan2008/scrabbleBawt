@@ -3,8 +3,8 @@
 import { hashSeed, Rng } from '../../core/rng.js';
 import type { MatchConfig } from '../../core/types.js';
 import type { Category, Diagnosis } from './diagnose.js';
-import { KNOBS, knobSpec, knobValues, PINNED_KNOBS, withKnobs, type KnobName, type KnobValues } from './knobs.js';
-import { canonicalJson } from './pool.js';
+import { KNOBS, knobSpec, knobValues, PINNED_KNOBS, withKnobs, type KnobName, type KnobValues } from '../arms.js';
+import { canonicalJson } from '../bandit.js';
 
 /**
  * Unit direction per category (sign = which way the knob moves; magnitude = relative weight).

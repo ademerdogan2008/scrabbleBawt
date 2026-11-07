@@ -7,7 +7,7 @@
 //   near misses: auctions we bid on and lost by <= NEAR_MISS coins (Vickrey: we set the price);
 //   overpays: our wins priced far above the reference price of that letter;
 //   uncontested cheap wins of the winner while we had cash (denial).
-import type { BookEntry } from './pool.js';
+import type { BookEntry } from '../store.js';
 import type { AuctionRow, MatchSummary, PlayerSummary } from './ingest.js';
 
 export type Category =

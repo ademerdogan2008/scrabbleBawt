@@ -3,7 +3,7 @@
 // else in an arm's params is dropped, so a bad or hand-edited state file cannot push the live bot
 // outside a bounded region of parameter space.
 import type { MatchConfig } from '../core/types.js';
-import { resolveParams, type BawtParams } from '../bots/bawt/params.js';
+import { DEFAULT_PARAMS, PROFILES, resolveParams, type BawtParams } from '../bots/bawt/params.js';
 
 export interface Knob {
   lo: number;
@@ -78,6 +78,114 @@ export function armOverrides(
     const dw: Record<string, number> = {};
     for (const [k, w] of Object.entries(eff.denyWeights)) dw[k] = w * denyScale;
     out.denyWeights = dw;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------- knob helpers (cycle)
+// Used by the offline cycle (src/learn/cycle) to step arms through the whitelist. Arm params are
+// always written in the LEARNABLE vocabulary (denyScale stays a multiplier, see armOverrides), so
+// the live client and the sim gate (policy 'bawt-arm') apply them identically.
+
+export type KnobName = LearnableKey;
+
+export interface KnobSpec {
+  name: KnobName;
+  lo: number;
+  hi: number;
+  /** Value at DEFAULT_PARAMS (denyScale: 1). */
+  base: number;
+  /** Decimal places kept when writing (keeps arm params readable and ids stable). */
+  digits: number;
+}
+
+/** Count-valued knobs are written as integers. */
+const INTEGER_KNOBS: ReadonlySet<string> = new Set(['endWindow', 'greedMinSeats']);
+
+export const KNOBS: readonly KnobSpec[] = Object.freeze(
+  LEARNABLE_KEYS.map((name): KnobSpec => {
+    const k = LEARNABLE[name];
+    const dp = (DEFAULT_PARAMS as unknown as Record<string, unknown>)[name];
+    const base = typeof dp === 'number' ? dp : k.def;
+    return { name, lo: k.lo, hi: k.hi, base, digits: INTEGER_KNOBS.has(name) ? 0 : name === 'reserve' ? 1 : 3 };
+  }),
+);
+
+export const KNOB_NAMES: readonly KnobName[] = KNOBS.map((k) => k.name);
+
+/**
+ * Knobs some built-in profile overrides (e.g. kappaHi, reserve, floorA, floorB). An arm param is
+ * an absolute override that beats every profile, so moving one of these from a single loss would
+ * also move every other profile's tuned value. The cycle only steps them when the incumbent
+ * already pins them. denyScale is exempt: it scales whatever map the profile resolves to.
+ */
+export const PINNED_KNOBS: ReadonlySet<KnobName> = new Set(
+  KNOB_NAMES.filter((n) => n !== 'denyScale' && Object.values(PROFILES).some((p) => n in p)),
+);
+
+export function knobSpec(name: KnobName): KnobSpec {
+  return KNOBS.find((k) => k.name === name)!;
+}
+
+export type KnobValues = Partial<Record<KnobName, number>>;
+
+function roundTo(x: number, digits: number): number {
+  const f = 10 ** digits;
+  return Math.round(x * f) / f;
+}
+
+/** Clamp into the knob's range and round to its digits (non-finite: the base value). */
+export function clampKnob(name: KnobName, v: number): number {
+  const k = knobSpec(name);
+  if (!Number.isFinite(v)) return k.base;
+  return Math.min(k.hi, Math.max(k.lo, roundTo(v, k.digits)));
+}
+
+/**
+ * Effective knob values an arm plays with: explicit (clamped) arm params win; otherwise the value
+ * the bot resolves for `config` (profile-aware) when given, else DEFAULT_PARAMS. denyScale: 1.
+ */
+export function knobValues(params: Record<string, unknown>, config?: MatchConfig): Record<KnobName, number> {
+  const c = clampParams(params);
+  let resolved: BawtParams = DEFAULT_PARAMS;
+  if (config) {
+    try {
+      const { denyScale: _d, ...rest } = c;
+      resolved = resolveParams(config, rest);
+    } catch {
+      resolved = DEFAULT_PARAMS;
+    }
+  }
+  const out = {} as Record<KnobName, number>;
+  for (const k of KNOBS) {
+    const v = c[k.name];
+    if (v !== undefined) out[k.name] = v;
+    else if (k.name === 'denyScale') out.denyScale = 1;
+    else out[k.name] = (resolved as unknown as Record<string, number>)[k.name] ?? k.base;
+  }
+  return out;
+}
+
+/** True when a params object only touches whitelisted keys with finite in-range values. */
+export function paramsInBounds(params: Record<string, unknown>): boolean {
+  for (const [key, v] of Object.entries(params)) {
+    if (!isLearnable(key) || typeof v !== 'number' || !Number.isFinite(v)) return false;
+    const k = LEARNABLE[key];
+    if (v < k.lo - 1e-9 || v > k.hi + 1e-9) return false;
+  }
+  return true;
+}
+
+/**
+ * Apply knob values on top of `parent` params: only whitelisted keys survive, every value is
+ * clamped and rounded; values equal to the default are still written (explicit beats profile).
+ */
+export function withKnobs(parent: Record<string, unknown>, values: KnobValues): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(clampParams(parent)) as Array<[KnobName, number]>) out[k] = clampKnob(k, v);
+  for (const [name, v] of Object.entries(values) as Array<[KnobName, number | undefined]>) {
+    if (v === undefined || !isLearnable(name)) continue;
+    out[name] = clampKnob(name, v);
   }
   return out;
 }

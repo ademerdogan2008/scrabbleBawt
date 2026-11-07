@@ -14,7 +14,7 @@ import { resolve } from 'node:path';
 import { DEFAULTS, lowerPriority, runCycleLocked, watch, type CycleOptions } from '../src/learn/cycle/cycle.js';
 import { writeFakeLoss } from '../src/learn/cycle/fake.js';
 import { GATE_BUDGET_MS } from '../src/learn/cycle/gate.js';
-import { defaultStatePath } from '../src/learn/cycle/pool.js';
+import { defaultStatePath } from '../src/learn/store.js';
 
 interface Args {
   mode: 'once' | 'watch';

@@ -10,7 +10,9 @@ import { rackToString, rackTotal, rackValue } from '../../core/rack.js';
 import type { AuctionInfo, AuctionOutcome, MatchConfig, PlayerId } from '../../core/types.js';
 import { applyEvent, trackerFromStart, type MatchEvent } from '../../state/events.js';
 import type { MatchTracker } from '../../state/tracker.js';
-import { banditUpdate, DEFAULT_ARM_ID, rewardOf, type LearnState, type MatchRec } from './pool.js';
+import { updateArm } from '../bandit.js';
+import { rankOf, rewardOf } from '../reward.js';
+import { DEFAULT_ARM_ID, type LearnState, type MatchRecord as MatchRec } from '../store.js';
 
 export interface AuctionRow {
   index: number;
@@ -58,6 +60,8 @@ export interface MatchSummary {
   unplayedValue: number;
   /** Events that failed to apply (inconsistent log); the summary is still usable. */
   replayErrors: number;
+  /** Our decisions / accepted bids in the log (0 = we never played, e.g. joined after the end). */
+  decisions: number;
 }
 
 export const BINGO_LEN = 7;
@@ -81,13 +85,7 @@ export function parseLogLines(text: string): { records: Array<Record<string, unk
 
 /** Average rank of `mine` among `scores` (which include it): 1 + #higher + #tied-others / 2. */
 export function averageRank(scores: readonly number[], mine: number): number {
-  let higher = 0;
-  let tied = -1;
-  for (const s of scores) {
-    if (s > mine) higher++;
-    else if (s === mine) tied++;
-  }
-  return 1 + higher + Math.max(0, tied) / 2;
+  return rankOf(scores, mine);
 }
 
 function summarizePlayer(t: MatchTracker, id: PlayerId): PlayerSummary {
@@ -166,7 +164,8 @@ export function summarizeMatch(records: ReadonlyArray<Record<string, unknown>>, 
   const scores = [me.score, ...others.map((o) => o.score)];
   const rank = averageRank(scores, me.score);
   const best = others.reduce<PlayerSummary | undefined>((b, o) => (!b || o.score > b.score ? o : b), undefined);
-  const won = !best || me.score >= best.score;
+  // strictly the best score, as the live learner records it (src/learn/reward.ts)
+  const won = !best || me.score > best.score;
   const unplayed = (end.unplayed ?? {}) as { rack?: string; letters?: number; value?: number };
   const rack = tracker.view.me.rack;
   const ts = typeof end.ts === 'number' ? end.ts : Date.now();
@@ -180,13 +179,14 @@ export function summarizeMatch(records: ReadonlyArray<Record<string, unknown>>, 
     others,
     rank,
     won,
-    reward: rewardOf(config.players.length, rank),
+    reward: rewardOf(rank, config.players.length),
     winner: won ? me : best!,
     auctions: rows.sort((a, b) => a.index - b.index),
     finalRack: typeof unplayed.rack === 'string' ? unplayed.rack : rackToString(rack),
     unplayedTiles: typeof unplayed.letters === 'number' ? unplayed.letters : rackTotal(rack),
     unplayedValue: typeof unplayed.value === 'number' ? unplayed.value : rackValue(rack),
     replayErrors,
+    decisions: Math.max(decided.size, submitted.size),
   };
 }
 
@@ -253,19 +253,20 @@ export function backfill(s: LearnState, summaries: readonly MatchSummary[], mtim
   const out: number[] = [];
   for (const sum of [...summaries].sort((a, b) => a.matchId - b.matchId)) {
     if (known.has(sum.matchId)) continue;
+    if (sum.decisions === 0) continue; // never played; the live learner skips these too
     const mt = mtimes.get(sum.matchId) ?? 0;
     if (nowMs - mt < graceMs) continue;
     const rec = matchRecordOf(sum);
     if (!s.arms.some((a) => a.id === rec.armId)) rec.armId = DEFAULT_ARM_ID;
     s.matches.push(rec);
-    banditUpdate(s, rec.armId, rec.reward);
+    if (rec.players >= 2) updateArm(s, rec.armId, rec.reward);
     known.add(sum.matchId);
     out.push(sum.matchId);
   }
   return out;
 }
 
-/** Lost = not a (shared) top score and average rank above 1. */
-export function isLoss(m: Pick<MatchRec, 'rank' | 'won'>): boolean {
-  return m.rank > 1 && !m.won;
+/** Lost = not the best score and strictly beaten (a shared top score is neither win nor loss). */
+export function isLoss(m: Pick<MatchRec, 'rank' | 'won' | 'score' | 'bestOtherScore'>): boolean {
+  return m.rank > 1 && !m.won && m.score < m.bestOtherScore;
 }

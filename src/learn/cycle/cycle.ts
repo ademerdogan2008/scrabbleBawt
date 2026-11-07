@@ -15,7 +15,8 @@ import { diagnose, renderDiagnosis, type Diagnosis } from './diagnose.js';
 import { decideGate, focalSpec, gateLineups, GATE, GATE_BUDGET_MS, renderGate, simEvaluator, type Evaluator, type GateResult } from './gate.js';
 import { backfill, isLoss, readFinishedMatch, scanLogs, type MatchSummary } from './ingest.js';
 import { mirrorLineup, type MirrorInput } from './mirror.js';
-import { addArms, armIdFor, incumbentArm, loadState, posteriorMean, updateState, type Arm, type MatchRec, type PoolChange } from './pool.js';
+import { addArms, armIdFor, incumbentArm, posteriorMean, type PoolChange } from '../bandit.js';
+import { loadStateStrict as loadState, updateState, type Arm, type MatchRecord as MatchRec } from '../store.js';
 
 export interface CycleOptions {
   statePath: string;

@@ -37,6 +37,7 @@ import { solveKappa, type PacingResult } from './lambda.js';
 import { denialWeights } from './objective.js';
 import { FieldModel, winProb } from './opponents.js';
 import { checkOverrides, resolveParams, type BawtMode, type BawtParams } from './params.js';
+import { armOverrides, isLearnable } from '../../learn/arms.js';
 import {
   acquisitions,
   mcMarginal,
@@ -469,8 +470,37 @@ const withMode =
   (seed, opts) =>
     createBawt(seed, { mode, ...extra, ...checkOverrides(opts) }, name);
 
+/**
+ * A learning arm (src/learn/arms.ts vocabulary, e.g. {"tableScale":1.1,"denyScale":0.9}) played
+ * exactly as the live learning wrapper plays it: clamped to the LEARNABLE ranges and resolved per
+ * match config (denyScale scales the resolved profile's denyWeights). Used by the learn-cycle gate.
+ */
+const armFactory: PolicyFactory = (seed, opts) => {
+  const params = opts ?? {};
+  for (const k of Object.keys(params)) if (!isLearnable(k)) throw new Error(`bawt-arm: '${k}' is not a learnable knob`);
+  let inner: Policy | undefined;
+  return {
+    name: 'bawt-arm',
+    onMatchStart(view) {
+      inner = createBawt(seed, { mode: 'hyb', ...armOverrides(params, view.config) }, 'bawt-arm');
+      inner.onMatchStart(view);
+    },
+    decide(view, auction, ctx) {
+      if (!inner) this.onMatchStart(view);
+      return inner!.decide(view, auction, ctx);
+    },
+    onAuctionClosed(view, outcome) {
+      inner?.onAuctionClosed?.(view, outcome);
+    },
+    onMatchEnd(view) {
+      inner?.onMatchEnd?.(view);
+    },
+  };
+};
+
 export const policies: Record<string, PolicyFactory> = {
   bawt: withMode('hyb', 'bawt'),
+  'bawt-arm': armFactory,
   'bawt-quick': withMode('quick', 'bawt-quick'),
   'bawt-rollout': withMode('rollout', 'bawt-rollout'),
   'bawt-static': withMode('static', 'bawt-static'),

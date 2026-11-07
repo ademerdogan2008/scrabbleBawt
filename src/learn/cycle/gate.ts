@@ -14,7 +14,7 @@ import { getLineup } from '../../bots/lineups.js';
 import type { MatchSpec } from '../../sim/match.js';
 import { pairedT, type PairedTest } from '../../sim/stats.js';
 import { lineupLabels, matchSeed, rosterOrder, runJobs, type Job } from '../../sim/tournament.js';
-import type { ArmGate } from './pool.js';
+import type { ArmGate } from '../store.js';
 
 export const GATE = Object.freeze({
   maxCiHi: 0.05,
@@ -63,9 +63,12 @@ export function gateLineups(mirror: string[] | undefined): GateLineup[] {
   return out;
 }
 
-/** Registry spec of a bawt arm: 'bawt' or 'bawt:{json}'. */
+/**
+ * Registry spec of a learning arm: 'bawt' for {} (the default arm), else 'bawt-arm:{json}', which
+ * applies the params through armOverrides per match exactly as the live learning wrapper does.
+ */
 export function focalSpec(params: Record<string, unknown>): string {
-  return Object.keys(params).length === 0 ? 'bawt' : `bawt:${JSON.stringify(params)}`;
+  return Object.keys(params).length === 0 ? 'bawt' : `bawt-arm:${JSON.stringify(params)}`;
 }
 
 const FOCAL_LABEL = '__focal__';
