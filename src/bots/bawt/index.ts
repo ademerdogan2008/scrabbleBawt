@@ -145,17 +145,20 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       cdfs.push(f.fieldCdf(view, l, Math.max(0, futIndex)));
     }
     const allSims = f.realOpponents === 0;
+    // spend-down: inside the last endWindow useful auctions taper the reserve to 0 and raise κ_lo
+    const endT = p.endWindow > 0 ? Math.max(0, Math.min(1, 1 - futureUseful / p.endWindow)) : 0;
+    const kappaHi = allSims ? Math.max(p.kappaHi, p.kappaHiSims) : p.kappaHi;
     const pacing = solveKappa({
       values,
       floors,
       counts,
       fieldCdf: cdfs,
       balance,
-      reserve: p.reserve,
+      reserve: p.reserve * (1 - endT),
       incomeShare: allSims ? p.incomeShareSims : p.incomeShare,
       auctionType: view.config.auctionType,
-      kappaLo: p.kappaLo,
-      kappaHi: allSims ? Math.max(p.kappaHi, p.kappaHiSims) : p.kappaHi,
+      kappaLo: Math.min(kappaHi, p.kappaLo + endT * Math.max(0, p.endKappaLo - p.kappaLo)),
+      kappaHi,
     });
     if (p.lambdaScale !== 1) pacing.kappa /= p.lambdaScale;
     const li = idx(auction.letter);

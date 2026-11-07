@@ -61,6 +61,10 @@ export interface BawtParams {
   incomeShareSims: number;
   /** Scale on 1/κ (λ) for the K-13 style path. */
   lambdaScale: number;
+  /** Spend-down window: over the last `endWindow` useful auctions the reserve tapers to 0 and κ_lo
+   *  ramps linearly up to `endKappaLo` (coins are worth nothing once the bag is empty). 0 = off. */
+  endWindow: number;
+  endKappaLo: number;
 
   // ---------------------------------------------------------------- floor (§11 HYB)
   floorA: number;
@@ -164,6 +168,8 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   incomeShare: 0.35,
   incomeShareSims: 0.8,
   lambdaScale: 1,
+  endWindow: 0,
+  endKappaLo: 1,
   floorA: 2.5,
   floorB: 3.5,
   vowelCap: 0.4,

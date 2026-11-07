@@ -57,6 +57,11 @@ export const LINEUPS = {
     note: 'spite, hoarder and random tricks with a top-bot clone',
   },
   spiteHeadsUp: { seats: ['*', 'trick:spite'], note: 'heads-up spite / drain bidder (88 auctions)' },
+  baiter: {
+    seats: ['*', 'trick:baiter', 'trick:baiter', 'clone:lucent', 'clone:bron', 'clone:k13'],
+    note: 'greedybot bait: two adaptive price-pushers that drain the biggest spender, then buy cheap',
+  },
+  baiterHeadsUp: { seats: ['*', 'trick:baiter'], note: 'heads-up adaptive price-pusher (88 auctions)' },
   community: {
     seats: ['*', 'clone:lambi', 'clone:blackswan', 'clone:fieldShark', 'clone:fieldVolume', 'clone:ramp'],
     note: 'other community clones',
