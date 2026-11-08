@@ -7,7 +7,8 @@
 //
 // --once   one cycle, then exit (default)
 // --watch  poll every 30 s for new finished matches; low CPU priority; never two cycles at once
-// --fake-loss writes a simulated lost match (live JSONL format) into --logs first (offline demo)
+// --fake-loss writes a simulated lost match (live JSONL format) into --logs first (offline demo;
+//             requires explicit --state and --logs so it never touches the live learning state)
 //
 // Offline only: reads runs/live/*.jsonl and the LearnState file; never connects to a server.
 import { resolve } from 'node:path';
@@ -68,6 +69,11 @@ function parse(argv: string[]): Args {
     else if (k === '--max-losses') a.maxLosses = Math.max(1, Math.floor(int()));
     else if (k === '--fake-loss') a.fakeLoss = Math.floor(int());
     else throw new Error(`unknown option ${k}`);
+  }
+  // A fake loss is backfilled into the state as a real match (bandit update included): never let
+  // the demo write into the live logs or the live learning state.
+  if (a.fakeLoss !== undefined && (!argv.includes('--state') || !argv.includes('--logs'))) {
+    throw new Error('--fake-loss needs explicit --state and --logs (keep the demo out of the live learning state)');
   }
   return a;
 }
