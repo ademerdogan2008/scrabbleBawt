@@ -97,6 +97,13 @@ export interface BawtParams {
    *  (earlyScale) is off, κ is scaled by hoardBoost until hoardBoostUntil of the match (buy the
    *  cheap early letters they leave), and the end spend-down (endWindow) is off (don't fight them
    *  for the last letters). 0 = off. */
+  /** Steady pace (copy of the top live winners: ~3-4 letters every quarter). Target paceLetters
+   *  auction wins per match; κ *= clamp(1 + paceGain * (target so far - letters won), paceMin,
+   *  paceMax). 0 = off. */
+  paceLetters: number;
+  paceGain: number;
+  paceMin: number;
+  paceMax: number;
   hoardGuard: number;
   hoardFrom: number;
   hoardMinBal: number;
@@ -225,6 +232,10 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   dumpWindow: 0,
   dumpMult: 1,
   paceReserve: 0,
+  paceLetters: 0,
+  paceGain: 0.12,
+  paceMin: 0.75,
+  paceMax: 1.5,
   hoardGuard: 0,
   hoardFrom: 0.2,
   hoardMinBal: 60,

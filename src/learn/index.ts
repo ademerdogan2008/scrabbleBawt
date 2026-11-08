@@ -126,6 +126,9 @@ export function createLearningFactory(opts: LearnOptions): LearnHandle {
       const { state, status, backup } = loadState(statePath);
       if (status === 'corrupt') warn(`corrupt state file${backup ? ` moved to ${backup}` : ''}; starting fresh`);
       const sel = selectArm(state, new Rng(armSeed(config)));
+      // LEARN_FORCE_ARM=<id>: play that arm every match (short live trials); results still learned
+      const forced = process.env.LEARN_FORCE_ARM ? state.arms.find((a) => a.id === process.env.LEARN_FORCE_ARM) : undefined;
+      if (forced) sel.arm = forced;
       s.book = state.book;
       s.armId = sel.arm.id;
       s.overrides = sel.arm.id === DEFAULT_ARM_ID ? {} : armOverrides(sel.arm.params, config, base);

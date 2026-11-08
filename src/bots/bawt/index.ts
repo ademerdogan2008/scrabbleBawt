@@ -189,6 +189,10 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     if (p.lambdaScale !== 1) pacing.kappa /= p.lambdaScale;
     if (baited && !allSims) pacing.kappa *= p.baitShade;
     if (hoarding && !allSims && auction.index < p.hoardBoostUntil * T) pacing.kappa *= p.hoardBoost;
+    if (p.paceLetters > 0 && !allSims) {
+      const behind = (p.paceLetters * auction.index) / Math.max(1, T) - view.me.lettersWon;
+      pacing.kappa *= Math.max(p.paceMin, Math.min(p.paceMax, 1 + p.paceGain * behind));
+    }
     if (greedy && !hoarding && p.earlyScale !== 1 && !allSims) {
       const prog = auction.index / Math.max(1, T);
       const ramp = prog <= p.earlyUntil ? 0 : Math.min(1, (prog - p.earlyUntil) / Math.max(1e-6, p.rampEnd - p.earlyUntil));

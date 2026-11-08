@@ -39,6 +39,8 @@ export const LEARNABLE = Object.freeze({
   dumpWindow: { lo: 0, hi: 20, def: 0 },
   dumpMult: { lo: 0.5, hi: 2, def: 1 },
   paceReserve: { lo: 0, hi: 140, def: 0 },
+  paceLetters: { lo: 0, hi: 22, def: 0 },
+  paceGain: { lo: 0, hi: 0.3, def: 0.12 },
   hoardGuard: { lo: 0, hi: 1, def: 0 },
   hoardMinBal: { lo: 40, hi: 90, def: 60 },
   hoardShare: { lo: 0.2, hi: 0.8, def: 0.5 },
