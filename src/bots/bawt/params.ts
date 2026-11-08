@@ -82,6 +82,11 @@ export interface BawtParams {
    *  in Vickrey the extra coins are paid only when a rival bid lands inside the edge. 0 = off. */
   keyEdge: number;
   keyMinFace: number;
+  /** Coin dump (Vickrey): over the last dumpWindow useful auctions, a useful letter is bid at least
+   *  dumpMult * balance / (useful auctions left): unspent coins score nothing, so the balance is
+   *  spread over the final letters instead of being kept. 0 = off. */
+  dumpWindow: number;
+  dumpMult: number;
   baitRatio: number;
   baitHyst: number;
   baitMinWins: number;
@@ -201,6 +206,8 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   greedMinSeats: 0,
   keyEdge: 0,
   keyMinFace: 4,
+  dumpWindow: 0,
+  dumpMult: 1,
   baitRatio: 2,
   baitHyst: 0.1,
   baitMinWins: 4,

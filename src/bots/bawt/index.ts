@@ -252,17 +252,22 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       sureWinCap: p.sureWinCap,
       rng,
     });
-    if (
-      p.keyEdge > 0 &&
-      r.bid > 0 &&
-      prep.useful &&
-      r.reason !== 'sureWin' &&
-      view.config.auctionType !== 'FirstPrice' &&
-      VALUE[li]! >= p.keyMinFace
-    ) {
-      return { bid: Math.min(Math.floor(prep.balance), r.bid + Math.round(p.keyEdge)), reason: `${r.reason}+key` };
+    let bid = r.bid;
+    let reason = r.reason;
+    const vickrey = view.config.auctionType !== 'FirstPrice';
+    if (p.keyEdge > 0 && bid > 0 && prep.useful && reason !== 'sureWin' && vickrey && VALUE[li]! >= p.keyMinFace) {
+      bid += Math.round(p.keyEdge);
+      reason = `${reason}+key`;
     }
-    return { bid: r.bid, reason: r.reason };
+    const usefulLeft = Math.max(0, auction.remainingAfter - 1); // useful auctions after this one
+    if (p.dumpWindow > 0 && vickrey && prep.useful && reason !== 'sureWin' && usefulLeft < p.dumpWindow) {
+      const dump = Math.floor((p.dumpMult * prep.balance) / (usefulLeft + 1));
+      if (dump > bid) {
+        bid = dump;
+        reason = `${reason}+dump`;
+      }
+    }
+    return { bid: Math.max(0, Math.min(Math.floor(prep.balance), bid)), reason };
   };
 
   const staticDecision = (view: MatchView, auction: AuctionInfo, li: number): Decision => {
