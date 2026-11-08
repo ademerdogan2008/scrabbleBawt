@@ -39,18 +39,43 @@ function openInBrowser(matchId: number): void {
 end tell`;
   execFile('osascript', ['-e', script], { timeout: 5000 }, () => undefined);
 }
-/** matchId -> learning arm played (from LOG_DIR/learn.jsonl, written by the live client at match end). */
-function armOf(matchId: number): string {
+/** matchId -> learning arm (LOG_DIR/learn.jsonl: armStart at match start, learn at match end). */
+function armId(matchId: number): string | undefined {
   try {
     for (const l of readFileSync(join(dir, 'learn.jsonl'), 'utf8').split('\n').reverse()) {
       if (!l.includes(`"matchId":${matchId},`)) continue;
-      const a = JSON.parse(l)?.learn;
-      if (a?.matchId === matchId) return ` [arm ${a.armId}]`;
+      const d = JSON.parse(l);
+      const a = d?.learn ?? d?.armStart;
+      if (a?.matchId === matchId) return String(a.armId);
     }
   } catch {
     /* no learner log */
   }
-  return '';
+  return undefined;
+}
+const tag = (matchId: number): string => `[${(armId(matchId) ?? '?').padEnd(10)}]`;
+
+/** Per-arm live record from learn.jsonl match-end lines (win = rank 1). */
+function armBoard(): string {
+  const agg = new Map<string, { n: number; w: number; top2: number; rank: number }>();
+  try {
+    for (const l of readFileSync(join(dir, 'learn.jsonl'), 'utf8').split('\n')) {
+      if (!l.startsWith('{"learn"')) continue;
+      const a = JSON.parse(l).learn;
+      const r = agg.get(a.armId) ?? { n: 0, w: 0, top2: 0, rank: 0 };
+      r.n++;
+      r.rank += a.rank;
+      if (a.rank === 1) r.w++;
+      if (a.rank <= 2) r.top2++;
+      agg.set(a.armId, r);
+    }
+  } catch {
+    return '';
+  }
+  const rows = [...agg.entries()].sort((x, y) => y[1].w / y[1].n - x[1].w / x[1].n);
+  return rows
+    .map(([id, r]) => `           ${id.padEnd(12)} ${String(r.w).padStart(3)}W/${String(r.n).padEnd(4)} win ${((100 * r.w) / r.n).toFixed(1).padStart(5)}%  top2 ${((100 * r.top2) / r.n).toFixed(0).padStart(3)}%  rank ${(r.rank / r.n).toFixed(2)}`)
+    .join('\n');
 }
 
 interface Row { id: number; name: string; score: number; bal: number; won: number; words: string[] }
@@ -94,7 +119,7 @@ function scan(): void {
     if (!st.started) {
       st.started = true;
       const opp = list.filter((r) => r.id !== c.myId).map((r) => r.name).join(', ');
-      console.log(`\n[${ts()}] ▶ START match ${c.matchId} (${c.auctionType}, ${c.totalAuctions} auctions) vs ${opp}`);
+      console.log(`\n${tag(c.matchId)} [${ts()}] ▶ START match ${c.matchId} (${c.auctionType}, ${c.totalAuctions} auctions) vs ${opp}`);
       if (n < c.totalAuctions && !firstScan) openInBrowser(c.matchId);
     }
     if (n >= c.totalAuctions) {
@@ -103,13 +128,14 @@ function scan(): void {
       rankSum += rank;
       if (rank === 1) wins++;
       console.log(
-        `[${ts()}] ■ END   match ${c.matchId}${armOf(c.matchId)}: ${ME} #${rank}/${list.length} with ${me.score} (${me.won} letters, ${me.words.join(' ') || '-'})\n` +
+        `${tag(c.matchId)} [${ts()}] ■ END   match ${c.matchId}: ${ME} #${rank}/${list.length} with ${me.score} (${me.won} letters, ${me.words.join(' ') || '-'})\n` +
           `           ${board}\n` +
           `           session: ${wins} wins / ${played} matches, avg rank ${(rankSum / played).toFixed(2)}`,
       );
+      if (!firstScan) console.log(`           — live record per variant —\n${armBoard()}`);
     } else if (n - st.lastProgress >= 17) {
       st.lastProgress = n;
-      console.log(`[${ts()}]   ${c.matchId} ${n}/${c.totalAuctions}: ${ME} #${rank} bal ${me.bal} letters ${me.won} | ${board}`);
+      console.log(`${tag(c.matchId)} [${ts()}]   ${c.matchId} ${n}/${c.totalAuctions}: ${ME} #${rank} bal ${me.bal} letters ${me.won} | ${board}`);
     }
   }
 }

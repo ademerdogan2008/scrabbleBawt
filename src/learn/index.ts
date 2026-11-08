@@ -135,6 +135,15 @@ export function createLearningFactory(opts: LearnOptions): LearnHandle {
       s.overrides = {};
       s.book = {};
     }
+    // announce the arm at match start (live monitor shows it before the match ends)
+    if (opts.logFile) {
+      try {
+        mkdirSync(dirname(opts.logFile), { recursive: true });
+        appendFileSync(opts.logFile, `${JSON.stringify({ armStart: { matchId: s.matchId, armId: s.armId } })}\n`);
+      } catch {
+        // visuals only
+      }
+    }
     sessions.delete(s.key);
     sessions.set(s.key, s);
     while (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value!);
