@@ -100,6 +100,11 @@ export interface BawtParams {
   /** Steady pace (copy of the top live winners: ~3-4 letters every quarter). Target paceLetters
    *  auction wins per match; κ *= clamp(1 + paceGain * (target so far - letters won), paceMin,
    *  paceMax). 0 = off. */
+  /** Q2 brake: κ *= q2Scale for auctions in [q2From·T, q2To·T) only (v1 elsewhere). Live default
+   *  losses: 5.2 letters bought in Q2 vs the winners' 2.5, then starved in Q3. 1 = off. */
+  q2Scale: number;
+  q2From: number;
+  q2To: number;
   paceLetters: number;
   paceGain: number;
   paceMin: number;
@@ -232,6 +237,9 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   dumpWindow: 0,
   dumpMult: 1,
   paceReserve: 0,
+  q2Scale: 1,
+  q2From: 0.25,
+  q2To: 0.5,
   paceLetters: 0,
   paceGain: 0.12,
   paceMin: 0.75,
