@@ -36,7 +36,7 @@ function openInBrowser(matchId: number, arm?: string): void {
   const url = `${SITE}/matches/${matchId}`;
   const pinned = arm ? TAB_OF.get(arm) : undefined;
   if (TAB_OF.size > 0 && !pinned) return;
-  const match = pinned ? `(id of t) is ${pinned}` : `URL of t starts with "${SITE}"`;
+  const match = pinned ? `((id of t) as text) is "${pinned}"` : `URL of t starts with "${SITE}"`;
   const script = `tell application "Google Chrome"
   if it is running then
     repeat with w in windows
