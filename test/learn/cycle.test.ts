@@ -221,7 +221,7 @@ describe('candidates', () => {
 
   it('proposes 2-4 bounded candidates from an incumbent at the range edges', () => {
     const inc = { tableScale: 1.3, lambdaScale: 0.7, kappaLo: 0.42, incomeShare: 0.245 };
-    const cands = generateCandidates(inc, [diag()], { config: CONFIG, seed: 42 });
+    const cands = generateCandidates(inc, [diag()], { config: CONFIG, seed: 1 });
     expect(cands.length).toBeGreaterThanOrEqual(2);
     expect(cands.length).toBeLessThanOrEqual(4);
     for (const c of cands) {
