@@ -3,8 +3,12 @@
 //   npx tsx scripts/learn-cycle.ts [--once|--watch] [--matches 200] [--workers 4] [--state PATH]
 //                                  [--logs runs/live] [--journal .planning/LEARNING.md]
 //                                  [--budget-ms 200] [--poll-ms 30000] [--grace-ms 120000]
-//                                  [--max-losses 12] [--fake-loss MATCH_ID]
+//                                  [--max-losses 12] [--fake-loss MATCH_ID] [--live-only|--sim-gate]
 //
+// --live-only  (default) no sim gate: at most 2 candidates per cycle go straight into the bandit
+//              pool as live arms (src/learn/cycle/live.ts: 1 cycle per 3 new matches, <= 2 untested
+//              arms, pool cap 6, retire lowest posterior with >= 8 plays)
+// --sim-gate   old mode: candidates must pass the paired-seed simulator gate first
 // --once   one cycle, then exit (default)
 // --watch  poll every 30 s for new finished matches; low CPU priority; never two cycles at once
 // --fake-loss writes a simulated lost match (live JSONL format) into --logs first (offline demo;
@@ -29,6 +33,7 @@ interface Args {
   graceMs: number;
   maxLosses: number;
   fakeLoss?: number;
+  liveOnly: boolean;
 }
 
 function parse(argv: string[]): Args {
@@ -43,6 +48,7 @@ function parse(argv: string[]): Args {
     pollMs: DEFAULTS.pollMs,
     graceMs: DEFAULTS.graceMs,
     maxLosses: DEFAULTS.maxLosses,
+    liveOnly: true,
   };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]!;
@@ -67,6 +73,8 @@ function parse(argv: string[]): Args {
     else if (k === '--poll-ms') a.pollMs = Math.max(1000, int());
     else if (k === '--grace-ms') a.graceMs = int();
     else if (k === '--max-losses') a.maxLosses = Math.max(1, Math.floor(int()));
+    else if (k === '--live-only') a.liveOnly = true;
+    else if (k === '--sim-gate') a.liveOnly = false;
     else if (k === '--fake-loss') a.fakeLoss = Math.floor(int());
     else throw new Error(`unknown option ${k}`);
   }
@@ -96,6 +104,7 @@ async function main(): Promise<number> {
     budgetMs: a.budgetMs,
     graceMs: a.fakeLoss !== undefined ? 0 : a.graceMs,
     maxLosses: a.maxLosses,
+    liveOnly: a.liveOnly,
     log,
     onProgress: (d, t) => {
       const pct = Math.floor((100 * d) / t);
@@ -106,7 +115,7 @@ async function main(): Promise<number> {
       }
     },
   };
-  log(`state ${a.state}; logs ${a.logs}; journal ${a.journal}; ${a.matches} seeds/lineup, ${a.workers} workers`);
+  log(`state ${a.state}; logs ${a.logs}; journal ${a.journal}; ${a.liveOnly ? 'live-only (no sim gate)' : `${a.matches} seeds/lineup, ${a.workers} workers`}`);
   if (a.mode === 'once') {
     const r = await runCycleLocked(opts);
     log(
@@ -114,7 +123,9 @@ async function main(): Promise<number> {
         ? 'no new losses'
         : r.status === 'busy'
           ? 'another cycle is running (lock held)'
-          : `analysed ${r.analyzed.length} loss(es); accepted ${r.outcomes.filter((x) => x.gate.pass).length}/${r.outcomes.length}; ${(r.ms / 1000).toFixed(1)} s`,
+          : a.liveOnly
+            ? `analysed ${r.analyzed.length} loss(es); added ${r.pool?.added.join(', ') || '-'}; retired ${r.pool?.retired.join(', ') || '-'}; ${(r.ms / 1000).toFixed(1)} s`
+            : `analysed ${r.analyzed.length} loss(es); accepted ${r.outcomes.filter((x) => x.gate.pass).length}/${r.outcomes.length}; ${(r.ms / 1000).toFixed(1)} s`,
     );
     return 0;
   }

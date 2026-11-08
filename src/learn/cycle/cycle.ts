@@ -15,6 +15,7 @@ import { diagnose, renderDiagnosis, type Diagnosis } from './diagnose.js';
 import { decideGate, focalSpec, gateLineups, GATE, GATE_BUDGET_MS, renderGate, simEvaluator, type Evaluator, type GateResult } from './gate.js';
 import { backfill, isLoss, readFinishedMatch, scanLogs, type MatchSummary } from './ingest.js';
 import { mirrorLineup, type MirrorInput } from './mirror.js';
+import { runLiveCycle } from './live.js';
 import { addArms, armIdFor, incumbentArm, posteriorMean, type PoolChange } from '../bandit.js';
 import { loadStateStrict as loadState, updateState, type Arm, type MatchRecord as MatchRec } from '../store.js';
 
@@ -33,6 +34,8 @@ export interface CycleOptions {
   /** At most this many (most recent) losses are diagnosed per cycle; older backlog is marked. */
   maxLosses?: number;
   evaluator?: Evaluator;
+  /** Skip the sim gate: candidates go straight into the pool as live arms (see live.ts). */
+  liveOnly?: boolean;
   now?: () => number;
   log?: (msg: string) => void;
   onProgress?: (done: number, total: number) => void;
@@ -154,6 +157,7 @@ const fmt = (v: unknown) => '`' + JSON.stringify(v) + '`';
 // ------------------------------------------------------------------------------------ cycle
 
 export async function runCycle(o: CycleOptions): Promise<CycleReport> {
+  if (o.liveOnly) return runLiveCycle(o);
   const t0 = performance.now();
   const now = o.now ?? Date.now;
   const log = o.log ?? (() => {});
