@@ -38,6 +38,7 @@ export const LEARNABLE = Object.freeze({
   keyMinFace: { lo: 3, hi: 8, def: 4 },
   dumpWindow: { lo: 0, hi: 20, def: 0 },
   dumpMult: { lo: 0.5, hi: 2, def: 1 },
+  paceReserve: { lo: 0, hi: 140, def: 0 },
 } satisfies Record<string, Knob>);
 
 export type LearnableKey = keyof typeof LEARNABLE;

@@ -87,6 +87,10 @@ export interface BawtParams {
    *  spread over the final letters instead of being kept. 0 = off. */
   dumpWindow: number;
   dumpMult: number;
+  /** Spending plan: the pacing reserve is at least paceReserve * (useful auctions left / total),
+   *  so money is saved for the second half (live winners hold ~56 coins at half-time; v1 ~44 and
+   *  starves in Q3-Q4). 0 = off. */
+  paceReserve: number;
   baitRatio: number;
   baitHyst: number;
   baitMinWins: number;
@@ -208,6 +212,7 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   keyMinFace: 4,
   dumpWindow: 0,
   dumpMult: 1,
+  paceReserve: 0,
   baitRatio: 2,
   baitHyst: 0.1,
   baitMinWins: 4,

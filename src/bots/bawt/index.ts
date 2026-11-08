@@ -164,7 +164,7 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       counts,
       fieldCdf: cdfs,
       balance,
-      reserve: (greedy ? p.reserve : p.calmReserve) * (1 - endT),
+      reserve: Math.max((greedy ? p.reserve : p.calmReserve) * (1 - endT), p.paceReserve > 0 ? (p.paceReserve * futureUseful) / Math.max(1, T) : 0),
       incomeShare: allSims ? p.incomeShareSims : greedy ? p.incomeShare : p.calmIncomeShare,
       auctionType: view.config.auctionType,
       kappaLo: Math.min(kappaHi, kLo + endT * Math.max(0, p.endKappaLo - kLo)),
