@@ -91,6 +91,18 @@ export interface BawtParams {
    *  so money is saved for the second half (live winners hold ~56 coins at half-time; v1 ~44 and
    *  starves in Q3-Q4). 0 = off. */
   paceReserve: number;
+  /** Hoarder counter. A real rival is a hoarder when, after hoardFrom of the match, it still holds
+   *  >= hoardMinBal coins but has won < hoardShare of a fair share of the letters sold so far
+   *  (late hoarders / baiters that push early and buy late). While one is seated: early hold-back
+   *  (earlyScale) is off, κ is scaled by hoardBoost until hoardBoostUntil of the match (buy the
+   *  cheap early letters they leave), and the end spend-down (endWindow) is off (don't fight them
+   *  for the last letters). 0 = off. */
+  hoardGuard: number;
+  hoardFrom: number;
+  hoardMinBal: number;
+  hoardShare: number;
+  hoardBoost: number;
+  hoardBoostUntil: number;
   baitRatio: number;
   baitHyst: number;
   baitMinWins: number;
@@ -213,6 +225,12 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   dumpWindow: 0,
   dumpMult: 1,
   paceReserve: 0,
+  hoardGuard: 0,
+  hoardFrom: 0.2,
+  hoardMinBal: 60,
+  hoardShare: 0.5,
+  hoardBoost: 1.15,
+  hoardBoostUntil: 0.6,
   baitRatio: 2,
   baitHyst: 0.1,
   baitMinWins: 4,

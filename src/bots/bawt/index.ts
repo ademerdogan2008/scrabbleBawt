@@ -126,6 +126,21 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     packer.clearCache();
   };
 
+  /** True when a real rival hoards coins: rich but buying far below a fair share (hoardGuard). */
+  const hoardersSeated = (view: MatchView, index: number): boolean => {
+    const p = params!;
+    const T = view.config.totalAuctions;
+    if (index < p.hoardFrom * T) return false;
+    const seats = view.config.players.length;
+    const fair = index / Math.max(1, seats);
+    for (const info of view.config.players) {
+      if (info.isSim || info.id === view.config.myId) continue;
+      const r = view.players.get(info.id);
+      if (r && r.balance >= p.hoardMinBal && r.lettersWon < p.hoardShare * fair) return true;
+    }
+    return false;
+  };
+
   /** Table values, floors and pacing for a rack/balance. */
   const prepare = (view: MatchView, auction: AuctionInfo, rack: Rack, balance: number): Prep => {
     const p = params!;
@@ -155,7 +170,8 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     const allSims = f.realOpponents === 0;
     // spend-down: inside the last endWindow useful auctions taper the reserve to 0 and raise κ_lo
     const greedy = !baited && view.config.players.length >= p.greedMinSeats;
-    const endT = greedy && p.endWindow > 0 ? Math.max(0, Math.min(1, 1 - futureUseful / p.endWindow)) : 0;
+    const hoarding = p.hoardGuard > 0 && hoardersSeated(view, auction.index);
+    const endT = greedy && !hoarding && p.endWindow > 0 ? Math.max(0, Math.min(1, 1 - futureUseful / p.endWindow)) : 0;
     const kappaHi = allSims ? Math.max(p.kappaHi, p.kappaHiSims) : p.kappaHi;
     const kLo = greedy ? p.kappaLo : p.calmKappaLo;
     const pacing = solveKappa({
@@ -172,7 +188,8 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
     });
     if (p.lambdaScale !== 1) pacing.kappa /= p.lambdaScale;
     if (baited && !allSims) pacing.kappa *= p.baitShade;
-    if (greedy && p.earlyScale !== 1 && !allSims) {
+    if (hoarding && !allSims && auction.index < p.hoardBoostUntil * T) pacing.kappa *= p.hoardBoost;
+    if (greedy && !hoarding && p.earlyScale !== 1 && !allSims) {
       const prog = auction.index / Math.max(1, T);
       const ramp = prog <= p.earlyUntil ? 0 : Math.min(1, (prog - p.earlyUntil) / Math.max(1e-6, p.rampEnd - p.earlyUntil));
       pacing.kappa *= p.earlyScale + (1 - p.earlyScale) * ramp;
