@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "bench": "tsx src/sim/cli.ts",
     "start": "tsx src/client/main.ts",
-    "learn": "tsx scripts/learn-cycle.ts --watch",
+    "learn": "tsx scripts/learn-cycle.ts --watch --live-only",
     "demo:local": "bash scripts/demo-local.sh",
     "demo:bench": "tsx scripts/bawt-bench.ts --matches 200 --only lobbySims,starterFlood,h2hStarter,zoo:",
     "demo:shadow": "tsx scripts/client-shadow.ts --matches 1 --policy bawt --full-only --timeout-min 10",

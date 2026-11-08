@@ -78,6 +78,30 @@ npx tsx scripts/learn-cycle.ts --watch                   # npm run learn
 npx tsx scripts/learn-cycle.ts --once --fake-loss 900001 --logs /tmp/x/live --state /tmp/x/state.json --journal /tmp/x/L.md
 ```
 
+### Live-only mode (default since 2026-11-07)
+
+The old simulator's clones no longer match the live field (a sim gain from 72% to 90% became a
+live drop from 21% to 15%). So `npm run learn` (`--watch --live-only`, the script default) skips
+step 4 and lets the live bandit do the testing (`src/learn/cycle/live.ts`):
+
+- Ingest and diagnose work as above, and the journal heading reads `(live-only)`.
+- **Rate limit:** at most one cycle per 3 new finished live matches. The marker file is
+  `<state>.live-cycle.json`. The pool never holds more than 2 untested arms (plays < 5). This
+  lets each new arm collect real plays before the next one arrives.
+- **Parent:** the tested arm (plays >= 5, or `default`) with the highest posterior mean.
+- **Candidates** are tried in this order:
+  1. keyEdge +1 coin, only when lost-key-letters-to-X fired.
+  2. phase ("push early, harvest late"): earlyScale down, endWindow and endKappaLo up, one step.
+  3. The standard diagnosed, primary, x2 and random steps.
+- Every candidate is clamped by `LEARNABLE`.
+- **Dedupe:** a candidate is dropped when its params equal any existing arm's params within
+  1e-9. Retired arms count too, and so does the parent.
+- **Adding arms:** at most 2 per cycle, as `origin: 'cycle'` with gate stub
+  `{lineups: ['live-only'], matches: 1}`, which makes them live-eligible. The prior is Beta(1, 1).
+- **Pool cap 6:** when the pool is full, the cycle retires the arm with the lowest posterior mean
+  among arms with >= 8 plays. It never retires `default`. If no arm qualifies, nothing is added.
+- `--sim-gate` restores the old gated mode.
+
 ---
 
 ### Losses diagnosed 2026-11-08T00:11:58.376Z
