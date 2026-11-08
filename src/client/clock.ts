@@ -73,6 +73,8 @@ class Ring {
 
 /** Consecutive late live opens after which the lag window is reset (regime shift). */
 const RESET_AFTER_LATE = 4;
+/** Upper bound on the RTT term of a deadline (ms). */
+const MAX_RTT_GUARD_MS = 350;
 
 export class ClientClock {
   readonly marginMs: number;
@@ -185,7 +187,10 @@ export class ClientClock {
     const duration = a.closesAtMs - a.opensAtMs;
     const recvBranch = recvLocalMs + duration;
     const off = this.offsetEst;
-    const guard = this.rttP90 + this.marginMs;
+    // cap the RTT allowance: a burst of slow reducer replies once pushed rttP90 past the auction
+    // length, every deadline fell in the past, no bid was sent, so no new RTT sample could ever
+    // bring it back (live 2026-11-07 22:28: 68/68 auctions skipped)
+    const guard = Math.min(this.rttP90, MAX_RTT_GUARD_MS) + this.marginMs;
     if (off === undefined) {
       return recvBranch - guard - (opts.late ? this.lateExtraMs : 0);
     }

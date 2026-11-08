@@ -882,7 +882,10 @@ export class MatchDriver {
     const tr = this.recorder!.tracker;
     if (tr.view.current?.auctionId !== play.info.auctionId) return;
     if (this.now() >= play.deadline) {
-      if (pass === 'anchor') this.stats.bidsSkippedDeadline++;
+      if (pass === 'anchor') {
+        this.stats.bidsSkippedDeadline++;
+        this.o.log?.record({ k: 'info', msg: 'bid skipped (deadline)', auctionId: play.info.auctionId, pass });
+      }
       return;
     }
     play.passes++;
