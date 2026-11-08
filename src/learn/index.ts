@@ -120,6 +120,7 @@ export function createLearningFactory(opts: LearnOptions): LearnHandle {
   };
   const prevHook = setFieldModelHook(hook);
 
+  let cycleIndex = 0;
   const begin = (config: MatchConfig): Session => {
     const s: Session = { key: keyOf(config), matchId: config.matchId, armId: DEFAULT_ARM_ID, overrides: {}, book: {}, decisions: 0 };
     try {
@@ -127,7 +128,11 @@ export function createLearningFactory(opts: LearnOptions): LearnHandle {
       if (status === 'corrupt') warn(`corrupt state file${backup ? ` moved to ${backup}` : ''}; starting fresh`);
       const sel = selectArm(state, new Rng(armSeed(config)));
       // LEARN_FORCE_ARM=<id>: play that arm every match (short live trials); results still learned
-      const forced = process.env.LEARN_FORCE_ARM ? state.arms.find((a) => a.id === process.env.LEARN_FORCE_ARM) : undefined;
+      // LEARN_CYCLE_ARMS=a,b,c: round-robin over these arms, one per match, in order (live trials)
+      const cycle = (process.env.LEARN_CYCLE_ARMS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+      const cycId = cycle.length ? cycle[cycleIndex++ % cycle.length] : undefined;
+      const want = cycId ?? process.env.LEARN_FORCE_ARM;
+      const forced = want ? state.arms.find((a) => a.id === want) : undefined;
       if (forced) sel.arm = forced;
       s.book = state.book;
       s.armId = sel.arm.id;
