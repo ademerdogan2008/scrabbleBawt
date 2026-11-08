@@ -1,6 +1,7 @@
 // Paired-seed sweep of Bawt param variants vs the current default on several table templates.
 //   npx tsx scripts/pacing-sweep.ts --matches 300 --workers 4 '{"reserve":5}' '{"incomeShare":0.6}'
 //   nice npx tsx scripts/pacing-sweep.ts --templates liveField,liveFieldB '{"keyEdge":2}'  (live-fitted field)
+//   nice npx tsx scripts/pacing-sweep.ts --base 1 'bawt-arm:{}' 'bawt-arm:{"tableScale":1.15}'  (learner arms vs a base arm)
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { comparePaired } from '../src/sim/tournament.js';
 import { mirrorLineup, type MirrorInput } from '../src/learn/cycle/mirror.js';
@@ -56,7 +57,7 @@ const workers = opt('--workers', 4);
 const base = opt('--base', 0) ? argv.shift()! : 'bawt';
 const pct = (x: number) => (100 * x).toFixed(1);
 for (const v of argv) {
-  const spec = `bawt:${v}`;
+  const spec = /^[a-z][a-z-]*:/.test(v) ? v : `bawt:${v}`; // full policy spec (e.g. 'bawt-arm:{...}') or bawt params JSON
   for (const [name, template] of Object.entries(TEMPLATES)) {
     if (only && !only.has(name)) continue;
     const r = await comparePaired({ focalA: spec, focalB: base, template, matches, workers, baseSeed: 1, spec: { decisionBudgetMs: 200 } as never });
