@@ -15,6 +15,7 @@ import { createK13 } from './k13.js';
 import { createLala } from './lala.js';
 import { createLambi } from './lambi.js';
 import { createLionel } from './lionel.js';
+import { createLiveClone } from './live.js';
 import { createLucent } from './lucent.js';
 import { createMaverick } from './maverick.js';
 import { createNijello } from './nijello.js';
@@ -51,3 +52,6 @@ export const FITTED_CLONES: readonly string[] = ['clone:lucent', 'clone:bron', '
 
 // Generic profile-driven clone family: 'profile:<BotName>' (registry wildcard, opts.arg = name).
 policies['profile:*'] = createProfileClone;
+
+// Live-field clone family: 'live:<BotName>' from data/profiles-live.json (today's lobby).
+policies['live:*'] = createLiveClone;

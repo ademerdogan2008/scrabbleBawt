@@ -13,6 +13,7 @@
 //   starterFlood  HackUTD day-0 field: five starter-kit copies
 // Coverage lineups (every other zoo policy at least once; used by scripts/zoo-sanity.ts):
 //   tricksLate, tricksMixed, spiteHeadsUp, community, fieldFamilies, profiles
+// Live field (live:<Name> clones of today's lobby): liveField, liveFieldB
 import type { MatchSpec } from '../sim/match.js';
 
 export const FOCAL = '*';
@@ -73,6 +74,15 @@ export const LINEUPS = {
   profiles: {
     seats: ['*', 'profile:LUCENT', 'profile:Bron', 'profile:K-13', 'profile:Lionel', 'profile:Lala'],
     note: 'profile-driven clones (data/profiles.json KM curves)',
+  },
+  // ---- live field (data/profiles-live.json, calibrated in src/bots/clones/live-calib.ts)
+  liveField: {
+    seats: ['*', 'live:LexiconWarrior', "live:Odysseus's Voyage", 'live:RackMaw', 'live:cosine', 'live:Primey'],
+    note: "today's lobby: the 5 most frequent opponents of Malicious in the last 1000 matches",
+  },
+  liveFieldB: {
+    seats: ['*', 'live:peanuts', 'live:Lucy', 'live:GodOfThudner', 'live:aipom', 'live:Lbender'],
+    note: "today's lobby: the next 5 most frequent opponents of Malicious",
   },
 } as const satisfies Record<string, NamedLineup>;
 
