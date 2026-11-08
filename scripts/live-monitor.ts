@@ -20,15 +20,28 @@ const ts = (): string => new Date().toLocaleTimeString();
 const SITE = 'https://scrabblebot.spacetimedb.com';
 const BROWSER = process.env.MONITOR_BROWSER !== '0' && process.platform === 'darwin';
 
-/** Point the first Chrome tab already on the ScrabbleBot site at the match page (no new tabs). */
-function openInBrowser(matchId: number): void {
+/** MONITOR_TABS="default:<chromeTabId>,key1:<chromeTabId>": pin each variant to its own Chrome tab. */
+const TAB_OF = new Map(
+  (process.env.MONITOR_TABS ?? '')
+    .split(',')
+    .map((x) => x.trim().split(':'))
+    .filter((kv) => kv.length === 2 && /^\d+$/.test(kv[1]!))
+    .map(([arm, id]) => [arm!, id!] as const),
+);
+
+/** Point a Chrome tab at the match page (no new tabs): the variant's pinned tab when MONITOR_TABS is
+ *  set, else the first tab already on the ScrabbleBot site. */
+function openInBrowser(matchId: number, arm?: string): void {
   if (!BROWSER || !Number.isInteger(matchId)) return;
   const url = `${SITE}/matches/${matchId}`;
+  const pinned = arm ? TAB_OF.get(arm) : undefined;
+  if (TAB_OF.size > 0 && !pinned) return;
+  const match = pinned ? `(id of t) is ${pinned}` : `URL of t starts with "${SITE}"`;
   const script = `tell application "Google Chrome"
   if it is running then
     repeat with w in windows
       repeat with t in tabs of w
-        if URL of t starts with "${SITE}" then
+        if ${match} then
           set URL of t to "${url}"
           return "ok"
         end if
@@ -38,6 +51,18 @@ function openInBrowser(matchId: number): void {
   return "none"
 end tell`;
   execFile('osascript', ['-e', script], { timeout: 5000 }, () => undefined);
+}
+
+/** Matches whose variant was not known yet when they started (armStart not written yet). */
+const pendingOpen = new Set<number>();
+function openWhenKnown(matchId: number): void {
+  const arm = armId(matchId);
+  if (TAB_OF.size > 0 && !arm) {
+    pendingOpen.add(matchId);
+    return;
+  }
+  pendingOpen.delete(matchId);
+  openInBrowser(matchId, arm);
 }
 /** matchId -> learning arm (LOG_DIR/learn.jsonl: armStart at match start, learn at match end). */
 function armId(matchId: number): string | undefined {
@@ -127,7 +152,7 @@ function scan(): void {
       st.started = true;
       const opp = list.filter((r) => r.id !== c.myId).map((r) => r.name).join(', ');
       console.log(`\n${tag(c.matchId)} [${ts()}] ▶ START match ${c.matchId} (${c.auctionType}, ${c.totalAuctions} auctions) vs ${opp}`);
-      if (n < c.totalAuctions && !firstScan) openInBrowser(c.matchId);
+      if (n < c.totalAuctions && !firstScan) openWhenKnown(c.matchId);
     }
     if (n >= c.totalAuctions) {
       st.done = true;
@@ -152,14 +177,28 @@ console.log(`           — live record per variant —\n${armBoard()}`);
 let firstScan = true;
 scan();
 firstScan = false;
-// the newest unfinished match at startup: open it too
+// at startup: each pinned tab shows its variant's latest match, then the running match
+for (const arm of TAB_OF.keys()) {
+  try {
+    const last = readFileSync(join(dir, 'learn.jsonl'), 'utf8')
+      .split('\n')
+      .filter((l) => l.includes('"armStart"') && l.includes(`"armId":"${arm}"`))
+      .pop();
+    if (last) openInBrowser(JSON.parse(last).armStart.matchId, arm);
+  } catch {
+    /* no learner log */
+  }
+}
 openLatestRunning();
-setInterval(scan, 3000);
+setInterval(() => {
+  for (const id of [...pendingOpen]) openWhenKnown(id);
+  scan();
+}, 3000);
 
 function openLatestRunning(): void {
   if (!existsSync(dir)) return;
   const f = readdirSync(dir).filter((x) => x.startsWith('match-') && x.endsWith('.jsonl')).sort().pop();
   if (!f || seen.get(f)?.done) return;
   const id = Number(f.slice(6, -6));
-  openInBrowser(id);
+  openWhenKnown(id);
 }
