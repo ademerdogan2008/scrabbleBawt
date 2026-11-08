@@ -71,6 +71,9 @@ class Ring {
   }
 }
 
+/** Consecutive late live opens after which the lag window is reset (regime shift). */
+const RESET_AFTER_LATE = 4;
+
 export class ClientClock {
   readonly marginMs: number;
   readonly lateExtraMs: number;
@@ -79,7 +82,11 @@ export class ClientClock {
   readonly submitCostMs: number;
   private readonly alpha: number;
   private readonly rtts: Ring;
-  private readonly lags: Ring;
+  private lags: Ring;
+  private readonly lagWindowSize: number;
+  private consecutiveLate = 0;
+  /** Times the lag window was reset after a regime shift. */
+  offsetResets = 0;
   private ewma: number | undefined;
   private p90Cache: number | undefined;
   private offsetCache: number | undefined;
@@ -93,7 +100,8 @@ export class ClientClock {
     this.submitCostMs = opts.submitCostMs ?? 5;
     this.alpha = opts.rttAlpha ?? 0.2;
     this.rtts = new Ring(opts.rttWindow ?? 64);
-    this.lags = new Ring(opts.lagWindow ?? 64);
+    this.lagWindowSize = opts.lagWindow ?? 64;
+    this.lags = new Ring(this.lagWindowSize);
     this.clock = opts.now ?? localNowMs;
   }
 
@@ -153,7 +161,21 @@ export class ClientClock {
   observeLiveOpen(opensAtMs: number, recvLocalMs: number): boolean {
     const off = this.offsetEst;
     const lag = recvLocalMs - opensAtMs;
-    if (off !== undefined && lag > off + this.stallMs) return true;
+    if (off !== undefined && lag > off + this.stallMs) {
+      // Regime shift guard: if the lag stays high for several opens in a row (network latency or
+      // local clock stepped up), the old offset is stale. Without this the offset froze at the old
+      // value, every deadline came out too early and every bid was skipped (live 2026-11-07).
+      if (++this.consecutiveLate >= RESET_AFTER_LATE) {
+        this.lags = new Ring(this.lagWindowSize);
+        this.offsetCache = undefined;
+        this.consecutiveLate = 0;
+        this.recordArrival(opensAtMs, recvLocalMs);
+        this.offsetResets++;
+        return false;
+      }
+      return true;
+    }
+    this.consecutiveLate = 0;
     this.recordArrival(opensAtMs, recvLocalMs);
     return false;
   }

@@ -20,6 +20,13 @@ while true; do
     newest=$(ls -t runs/live 2>/dev/null | grep -v -e supervisor.log -e client-stdout.log | head -1)
     [ -z "$newest" ] && continue
     age=$(( $(date +%s) - $(stat -f %m "runs/live/$newest") ))
+    m=$(ls -t runs/live/match-*.jsonl 2>/dev/null | head -1)
+    if [ -n "$m" ] && [ "$m" != "${skipRestarted:-}" ] && [ "$(grep -c 'bid skipped (deadline)' "$m")" -ge "${SKIP_MAX:-15}" ]; then
+      echo "[$(date '+%F %T')] $m: >= ${SKIP_MAX:-15} deadline-skipped bids -> restart" >> "$LOG"
+      skipRestarted="$m"
+      stop
+      break
+    fi
     if [ "$age" -gt "$STALL_S" ]; then
       echo "[$(date '+%F %T')] stall: no log write for ${age}s (newest $newest) -> restart" >> "$LOG"
       stop

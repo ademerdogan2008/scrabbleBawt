@@ -113,3 +113,19 @@ describe('deadlineFor', () => {
     expect(c.budgetFor(1500, 1400, 0)).toBe(100);
   });
 });
+
+describe('ClientClock regime shift', () => {
+  it('resets the offset when the arrival lag stays high (no permanent deadline skips)', () => {
+    const c = new ClientClock({ now: () => 0 });
+    for (let i = 0; i < 20; i++) expect(c.observeLiveOpen(1000 * i, 1000 * i + 50)).toBe(false);
+    expect(c.offsetEst).toBeCloseTo(50, 0);
+    // lag jumps to 600 ms (clock stepped / latency up): first 3 opens are late, the 4th resets
+    for (let i = 20; i < 23; i++) expect(c.observeLiveOpen(1000 * i, 1000 * i + 600)).toBe(true);
+    expect(c.observeLiveOpen(23_000, 23_600)).toBe(false);
+    expect(c.offsetEst).toBeCloseTo(600, 0);
+    expect(c.offsetResets).toBe(1);
+    // a single isolated stall still counts as late
+    expect(c.observeLiveOpen(24_000, 24_600)).toBe(false);
+    expect(c.observeLiveOpen(25_000, 26_000)).toBe(true);
+  });
+});
