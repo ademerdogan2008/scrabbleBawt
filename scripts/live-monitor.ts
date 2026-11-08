@@ -3,6 +3,9 @@
 // (rank, scores, running session record). Read-only; never touches the network or the token.
 //
 //   npm run monitor            (LOG_DIR overrides runs/live)
+// On each new match it also points the open ScrabbleBot tab in Google Chrome at
+// https://scrabblebot.spacetimedb.com/matches/<id> (macOS, visuals only; MONITOR_BROWSER=0 disables).
+import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { eventsFromLog } from '../src/client/log.js';
@@ -14,6 +17,28 @@ let wins = 0;
 let played = 0;
 let rankSum = 0;
 const ts = (): string => new Date().toLocaleTimeString();
+const SITE = 'https://scrabblebot.spacetimedb.com';
+const BROWSER = process.env.MONITOR_BROWSER !== '0' && process.platform === 'darwin';
+
+/** Point the first Chrome tab already on the ScrabbleBot site at the match page (no new tabs). */
+function openInBrowser(matchId: number): void {
+  if (!BROWSER || !Number.isInteger(matchId)) return;
+  const url = `${SITE}/matches/${matchId}`;
+  const script = `tell application "Google Chrome"
+  if it is running then
+    repeat with w in windows
+      repeat with t in tabs of w
+        if URL of t starts with "${SITE}" then
+          set URL of t to "${url}"
+          return "ok"
+        end if
+      end repeat
+    end repeat
+  end if
+  return "none"
+end tell`;
+  execFile('osascript', ['-e', script], { timeout: 5000 }, () => undefined);
+}
 /** matchId -> learning arm played (from LOG_DIR/learn.jsonl, written by the live client at match end). */
 function armOf(matchId: number): string {
   try {
@@ -70,6 +95,7 @@ function scan(): void {
       st.started = true;
       const opp = list.filter((r) => r.id !== c.myId).map((r) => r.name).join(', ');
       console.log(`\n[${ts()}] ▶ START match ${c.matchId} (${c.auctionType}, ${c.totalAuctions} auctions) vs ${opp}`);
+      if (n < c.totalAuctions && !firstScan) openInBrowser(c.matchId);
     }
     if (n >= c.totalAuctions) {
       st.done = true;
@@ -88,6 +114,18 @@ function scan(): void {
   }
 }
 
-console.log(`live-game-monitor: watching ${dir} (Ctrl-C to quit)`);
+console.log(`live-game-monitor: watching ${dir} (Ctrl-C to quit)${BROWSER ? '; following matches in Chrome' : ''}`);
+let firstScan = true;
 scan();
+firstScan = false;
+// the newest unfinished match at startup: open it too
+openLatestRunning();
 setInterval(scan, 3000);
+
+function openLatestRunning(): void {
+  if (!existsSync(dir)) return;
+  const f = readdirSync(dir).filter((x) => x.startsWith('match-') && x.endsWith('.jsonl')).sort().pop();
+  if (!f || seen.get(f)?.done) return;
+  const id = Number(f.slice(6, -6));
+  openInBrowser(id);
+}
