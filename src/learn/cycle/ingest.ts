@@ -12,7 +12,7 @@ import { applyEvent, trackerFromStart, type MatchEvent } from '../../state/event
 import type { MatchTracker } from '../../state/tracker.js';
 import { updateArm } from '../bandit.js';
 import { rankOf, rewardOf } from '../reward.js';
-import { DEFAULT_ARM_ID, type LearnState, type MatchRecord as MatchRec } from '../store.js';
+import { DEFAULT_ARM_ID, isKnownMatch, type LearnState, type MatchRecord as MatchRec } from '../store.js';
 
 export interface AuctionRow {
   index: number;
@@ -252,7 +252,7 @@ export function backfill(s: LearnState, summaries: readonly MatchSummary[], mtim
   const known = new Set(s.matches.map((m) => m.matchId));
   const out: number[] = [];
   for (const sum of [...summaries].sort((a, b) => a.matchId - b.matchId)) {
-    if (known.has(sum.matchId)) continue;
+    if (known.has(sum.matchId) || isKnownMatch(s, sum.matchId)) continue; // incl. trimmed records
     if (sum.decisions === 0) continue; // never played; the live learner skips these too
     const mt = mtimes.get(sum.matchId) ?? 0;
     if (nowMs - mt < graceMs) continue;

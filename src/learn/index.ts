@@ -23,7 +23,7 @@ import { armOverrides } from './arms.js';
 import { GAMMA, posteriorMeans, selectArm, updateArm } from './bandit.js';
 import { bookPrior, factsFromView, updateBook, type ScaleObservation } from './book.js';
 import { standingFromView } from './reward.js';
-import { DEFAULT_ARM_ID, defaultStatePath, loadState, saveState, type BookEntry, type MatchRecord } from './store.js';
+import { DEFAULT_ARM_ID, defaultStatePath, loadState, saveState, withStateLock, type BookEntry, type LearnState, type MatchRecord } from './store.js';
 
 export * from './arms.js';
 export * from './bandit.js';
@@ -141,37 +141,48 @@ export function createLearningFactory(opts: LearnOptions): LearnHandle {
     return s;
   };
 
+  /** Fold one finished match into the state file (caller holds the state lock). */
+  const learnMatch = (view: MatchView, s: Session, st: ReturnType<typeof standingFromView>): LearnState | undefined => {
+    const { state, status, backup } = loadState(statePath);
+    if (status === 'corrupt') warn(`corrupt state file${backup ? ` moved to ${backup}` : ''}; starting fresh`);
+    // exact dedupe only (not trimmedThrough): a live match is recorded right away, never trimmed first
+    if (state.matches.some((m) => m.matchId === s.matchId)) return undefined;
+    if (st.players >= 2) updateArm(state, s.armId, st.reward, gamma);
+    const scales = new Map<string, ScaleObservation>();
+    for (const o of s.field?.opponents ?? []) {
+      if (o.kind === 'sim') continue;
+      scales.set(o.name, { logScale: o.logScale, kind: o.kind, observed: o.observed });
+    }
+    const t = now();
+    updateBook(state, factsFromView(view), t, scales);
+    const rec: MatchRecord = {
+      matchId: s.matchId,
+      armId: s.armId,
+      endedAt: t.toISOString(),
+      players: st.players,
+      realPlayers: st.realPlayers,
+      rank: st.rank,
+      score: st.score,
+      bestOtherScore: st.bestOtherScore,
+      won: st.won,
+      reward: st.reward,
+      opponents: view.config.players.filter((p) => p.id !== view.config.myId).map((p) => p.name),
+    };
+    state.matches.push(rec);
+    saveState(state, statePath);
+    return state;
+  };
+
   const end = (view: MatchView, s: Session | undefined): void => {
     if (!s) return;
     sessions.delete(s.key);
     if (s.decisions === 0) return; // never played (e.g. picked up an already-ended match)
     try {
       const st = standingFromView(view);
-      const { state } = loadState(statePath);
-      if (state.matches.some((m) => m.matchId === s.matchId)) return; // already learned
-      if (st.players >= 2) updateArm(state, s.armId, st.reward, gamma);
-      const scales = new Map<string, ScaleObservation>();
-      for (const o of s.field?.opponents ?? []) {
-        if (o.kind === 'sim') continue;
-        scales.set(o.name, { logScale: o.logScale, kind: o.kind, observed: o.observed });
-      }
-      const t = now();
-      updateBook(state, factsFromView(view), t, scales);
-      const rec: MatchRecord = {
-        matchId: s.matchId,
-        armId: s.armId,
-        endedAt: t.toISOString(),
-        players: st.players,
-        realPlayers: st.realPlayers,
-        rank: st.rank,
-        score: st.score,
-        bestOtherScore: st.bestOtherScore,
-        won: st.won,
-        reward: st.reward,
-        opponents: view.config.players.filter((p) => p.id !== view.config.myId).map((p) => p.name),
-      };
-      state.matches.push(rec);
-      saveState(state, statePath);
+      // Locked re-read-modify-write: the learn-cycle watcher may have written since match start.
+      // Short wait only (this runs on the client's event loop); a wedged lock is taken over.
+      const state = withStateLock(statePath, () => learnMatch(view, s, st), { timeoutMs: 500 });
+      if (!state) return; // already learned
       const line: LearnLine = {
         learn: { matchId: s.matchId, armId: s.armId, rank: st.rank, players: st.players, reward: st.reward, posteriorMeans: posteriorMeans(state) },
       };

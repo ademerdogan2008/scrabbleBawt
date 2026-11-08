@@ -168,7 +168,8 @@ export async function runCycle(o: CycleOptions): Promise<CycleReport> {
   const byId = new Map(summaries.map((s) => [s.matchId, s]));
   let state = loadState(o.statePath);
   const known = new Set(state.matches.map((m) => m.matchId));
-  if (summaries.some((s) => !known.has(s.matchId))) {
+  const trimmed = state.trimmedThrough ?? -Infinity;
+  if (summaries.some((s) => !known.has(s.matchId) && s.matchId > trimmed)) {
     state = updateState(o.statePath, (s) => {
       report.backfilled = backfill(s, summaries, mtimes, now(), o.graceMs ?? DEFAULTS.graceMs);
     });

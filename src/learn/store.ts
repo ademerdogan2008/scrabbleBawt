@@ -4,14 +4,21 @@
 // the arms (parameter variants with Beta posteriors), the per-match records and the opponent book.
 // Writes are atomic (tmp file + rename). A missing file yields a fresh default state; a corrupt
 // file is moved aside to <path>.bak and replaced by a fresh default state on the next save.
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+// Two processes write the file (the live client at match end, the learn-cycle watcher): every
+// read-modify-write runs under a short exclusive lock (<path>.lock, see withStateLock) so neither
+// can overwrite the other's update with a stale copy.
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const LEARN_VERSION = 1 as const;
 export const DEFAULT_ARM_ID = 'default';
-/** Match records kept in the state file (oldest dropped first). */
-export const MAX_MATCH_RECORDS = 20_000;
+/**
+ * Match records kept in the state file (oldest dropped first). Kept small: the live client parses
+ * and rewrites the whole file synchronously at match start / end, possibly while another match is
+ * bidding. Dropped ids are remembered in `trimmedThrough` so the cycle never re-backfills them.
+ */
+export const MAX_MATCH_RECORDS = 2_000;
 
 export type ArmOrigin = 'default' | 'cycle' | 'manual';
 
@@ -79,6 +86,8 @@ export interface LearnState {
   arms: Arm[];
   matches: MatchRecord[];
   book: Record<string, BookEntry>;
+  /** Highest match id ever dropped from `matches` by the record cap (already learned). */
+  trimmedThrough?: number;
 }
 
 export function defaultArm(now: Date = new Date()): Arm {
@@ -159,7 +168,23 @@ export function normalizeState(raw: unknown): LearnState | undefined {
       updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : new Date(0).toISOString(),
     };
   }
-  return { version: LEARN_VERSION, arms, matches, book };
+  const out: LearnState = { version: LEARN_VERSION, arms, matches, book };
+  if (fin(raw.trimmedThrough)) out.trimmedThrough = raw.trimmedThrough;
+  return out;
+}
+
+/** True when a match is already learned: recorded, or dropped from the records by the cap. */
+export function isKnownMatch(s: LearnState, matchId: number): boolean {
+  return (s.trimmedThrough !== undefined && matchId <= s.trimmedThrough) || s.matches.some((m) => m.matchId === matchId);
+}
+
+/** Drop the oldest records beyond `max`, remembering the highest dropped match id. */
+export function trimMatches(state: LearnState, max: number = MAX_MATCH_RECORDS): void {
+  if (state.matches.length <= max) return;
+  const dropped = state.matches.splice(0, state.matches.length - max);
+  let hi = state.trimmedThrough ?? -Infinity;
+  for (const m of dropped) if (m.matchId > hi) hi = m.matchId;
+  if (Number.isFinite(hi)) state.trimmedThrough = hi;
 }
 
 export interface LoadResult {
@@ -192,7 +217,7 @@ export function loadState(path: string = defaultStatePath()): LoadResult {
 
 /** Atomic save: write <path>.tmp-<pid> then rename over the target. Throws on I/O errors. */
 export function saveState(state: LearnState, path: string = defaultStatePath()): void {
-  if (state.matches.length > MAX_MATCH_RECORDS) state.matches.splice(0, state.matches.length - MAX_MATCH_RECORDS);
+  trimMatches(state);
   mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp-${process.pid}`;
   writeFileSync(tmp, `${JSON.stringify(state, null, 1)}\n`);
@@ -212,13 +237,101 @@ export function loadStateStrict(path: string = defaultStatePath()): LearnState {
   return state;
 }
 
+// ------------------------------------------------------------------------------------- lock
+
+export interface LockOptions {
+  /** Give up waiting after this long and take the lock over (default 2000 ms). */
+  timeoutMs?: number;
+  /** A lock file older than this is stale (holder crashed mid-write) and is removed (default 10 s). */
+  staleMs?: number;
+}
+
+const sleepBuf = new Int32Array(new SharedArrayBuffer(4));
+const sleepSync = (ms: number) => Atomics.wait(sleepBuf, 0, 0, ms);
+
+function pidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (pid === process.pid) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+function tryLock(lock: string): boolean {
+  try {
+    const fd = openSync(lock, 'wx');
+    try {
+      writeSync(fd, String(process.pid));
+    } finally {
+      closeSync(fd);
+    }
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    return false;
+  }
+}
+
+function lockIsStale(lock: string, staleMs: number): boolean {
+  try {
+    if (Date.now() - statSync(lock).mtimeMs > staleMs) return true;
+    const pid = Number(readFileSync(lock, 'utf8').trim());
+    // an empty file is a holder between open and write: not stale
+    return Number.isInteger(pid) && pid > 0 && !pidAlive(pid);
+  } catch {
+    return false; // vanished: retry
+  }
+}
+
 /**
- * Read-modify-write with no await in between (keeps the race window against the live client's
- * own match-end save as small as possible). Uses the strict load: a corrupt file throws.
+ * Run `fn` holding the exclusive state lock <path>.lock (synchronous; held only for one
+ * read-modify-write, i.e. milliseconds). A stale lock (dead holder or older than staleMs) is
+ * removed; after timeoutMs the lock is taken over anyway so learning never wedges.
  */
-export function updateState(path: string, fn: (s: LearnState) => void): LearnState {
-  const s = loadStateStrict(path);
-  fn(s);
-  saveState(s, path);
-  return s;
+export function withStateLock<T>(path: string, fn: () => T, o: LockOptions = {}): T {
+  const lock = `${path}.lock`;
+  const timeoutMs = o.timeoutMs ?? 2000;
+  const staleMs = o.staleMs ?? 10_000;
+  mkdirSync(dirname(path), { recursive: true });
+  const t0 = Date.now();
+  let held = tryLock(lock);
+  while (!held) {
+    if (lockIsStale(lock, staleMs) || Date.now() - t0 >= timeoutMs) {
+      try {
+        unlinkSync(lock);
+      } catch {
+        /* raced */
+      }
+    } else sleepSync(5);
+    held = tryLock(lock);
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      if (readFileSync(lock, 'utf8').trim() === String(process.pid)) unlinkSync(lock);
+    } catch {
+      /* taken over or gone */
+    }
+  }
+}
+
+/**
+ * Locked read-modify-write (see withStateLock): re-reads the file under the lock, so updates made
+ * by the other process since our last read are kept. Uses the strict load: a corrupt file throws.
+ */
+export function updateState(path: string, fn: (s: LearnState) => void, o?: LockOptions): LearnState {
+  return withStateLock(
+    path,
+    () => {
+      const s = loadStateStrict(path);
+      fn(s);
+      saveState(s, path);
+      return s;
+    },
+    o,
+  );
 }
