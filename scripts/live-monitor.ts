@@ -36,14 +36,23 @@ function openInBrowser(matchId: number, arm?: string): void {
   const url = `${SITE}/matches/${matchId}`;
   const pinned = arm ? TAB_OF.get(arm) : undefined;
   if (TAB_OF.size > 0 && !pinned) return;
-  const match = pinned ? `((id of t) as text) is "${pinned}"` : `URL of t starts with "${SITE}"`;
+  const pinnedTest = pinned ? `((id of t) as text) is "${pinned}"` : 'false';
+  // pinned tab first; if it was closed, fall back to the first tab already on the site
   const script = `tell application "Google Chrome"
   if it is running then
     repeat with w in windows
       repeat with t in tabs of w
-        if ${match} then
+        if ${pinnedTest} then
           set URL of t to "${url}"
           return "ok"
+        end if
+      end repeat
+    end repeat
+    repeat with w in windows
+      repeat with t in tabs of w
+        if URL of t starts with "${SITE}" then
+          set URL of t to "${url}"
+          return "fallback"
         end if
       end repeat
     end repeat
