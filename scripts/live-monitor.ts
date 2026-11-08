@@ -14,6 +14,19 @@ let wins = 0;
 let played = 0;
 let rankSum = 0;
 const ts = (): string => new Date().toLocaleTimeString();
+/** matchId -> learning arm played (from LOG_DIR/learn.jsonl, written by the live client at match end). */
+function armOf(matchId: number): string {
+  try {
+    for (const l of readFileSync(join(dir, 'learn.jsonl'), 'utf8').split('\n').reverse()) {
+      if (!l.includes(`"matchId":${matchId},`)) continue;
+      const a = JSON.parse(l)?.learn;
+      if (a?.matchId === matchId) return ` [arm ${a.armId}]`;
+    }
+  } catch {
+    /* no learner log */
+  }
+  return '';
+}
 
 interface Row { id: number; name: string; score: number; bal: number; won: number; words: string[] }
 
@@ -64,7 +77,7 @@ function scan(): void {
       rankSum += rank;
       if (rank === 1) wins++;
       console.log(
-        `[${ts()}] ■ END   match ${c.matchId}: ${ME} #${rank}/${list.length} with ${me.score} (${me.won} letters, ${me.words.join(' ') || '-'})\n` +
+        `[${ts()}] ■ END   match ${c.matchId}${armOf(c.matchId)}: ${ME} #${rank}/${list.length} with ${me.score} (${me.won} letters, ${me.words.join(' ') || '-'})\n` +
           `           ${board}\n` +
           `           session: ${wins} wins / ${played} matches, avg rank ${(rankSum / played).toFixed(2)}`,
       );
