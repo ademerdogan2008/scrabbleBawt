@@ -26,6 +26,7 @@ const TEMPLATES: Record<string, string[]> = {
   full: ['*', 'clone:k13', 'clone:lionel', 'clone:nijello', 'clone:lala', 'profile:Waupus'],
   lobby: ['*', 'clone:lucent', 'clone:bron', 'clone:maverick', 'sim:Aggressive', 'sim:ValueBidder'],
   prof: ['*', 'profile:LUCENT', 'profile:Bron', 'profile:K-13', 'profile:Lionel', 'profile:Lala'],
+  lobbySims: [...LINEUPS.lobbySims.seats],
   sims: ['*', 'sim:Aggressive', 'sim:Aggressive', 'sim:ValueBidder', 'sim:ValueBidder', 'sim:Cheapskate'],
   // greedy-bait: price-pushers / spite drainers that push our price then let go
   baitShadow: ['*', 'trick:shadow', 'trick:allin', 'trick:bottomFeeder', 'sim:Aggressive', 'sim:ValueBidder'],
@@ -62,7 +63,7 @@ for (const v of argv) {
     const A = r.a.find((x) => x.label === `A:${spec}`)!;
     const B = r.b.find((x) => x.label === `B:${base}`)!;
     console.log(
-      `${v} @${name}: win ${pct(A.winRate)} vs ${pct(B.winRate)} | rank Δ ${r.rank.mean.toFixed(3)} [${r.rank.lo.toFixed(3)}, ${r.rank.hi.toFixed(3)}] | score ${A.avgScore.toFixed(1)} vs ${B.avgScore.toFixed(1)} | n=${r.matches}`,
+      `${v} @${name}: win ${pct(A.winRate)} vs ${pct(B.winRate)} | winΔ ${pct(r.win.mean)} [${pct(r.win.lo)}, ${pct(r.win.hi)}] | rank Δ ${r.rank.mean.toFixed(3)} [${r.rank.lo.toFixed(3)}, ${r.rank.hi.toFixed(3)}] | score ${A.avgScore.toFixed(1)} vs ${B.avgScore.toFixed(1)} | n=${r.matches} | ${(r.timing.wallMs / 1000).toFixed(0)}s`,
     );
   }
 }
