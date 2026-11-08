@@ -1,6 +1,6 @@
-// Match reward from the final standings: reward = (players - rank) / (players - 1) in [0, 1],
-// rank 1 = best, tied players share the average of the ranks they span (two players tied for
-// first in a 4-seat match both get rank 1.5 -> reward 5/6).
+// Match reward from the final standings, win-first: 1st = 1, 2nd = 0.35, 3rd = 0.1, worse = 0
+// (last place always 0). Rank 1 = best; tied players share the average of the ranks they span
+// and the reward interpolates (two players tied for first get rank 1.5 -> 0.675).
 import type { MatchView, PlayerId } from '../core/types.js';
 
 /** Average (fractional) rank of `myScore` among `scores` (which include my own score once). */
@@ -16,9 +16,23 @@ export function rankOf(scores: readonly number[], myScore: number): number {
 }
 
 /** (players - rank) / (players - 1); 1 for a solo match. */
+/** Win-first place values (user goal: wins, rank as tiebreak): 1st 1, 2nd 0.35, 3rd 0.1, else 0.
+ *  Last place is always 0 (heads-up: 1 / 0). */
+export const PLACE_REWARD: readonly number[] = Object.freeze([1, 0.35, 0.1]);
+
+function placeValue(place: number, players: number): number {
+  if (place >= players) return 0;
+  return PLACE_REWARD[place - 1] ?? 0;
+}
+
 export function rewardOf(rank: number, players: number): number {
   if (players <= 1) return 1;
-  return Math.max(0, Math.min(1, (players - rank) / (players - 1)));
+  const r = Math.max(1, Math.min(players, rank));
+  const lo = Math.floor(r);
+  const hi = Math.ceil(r);
+  // shared places (fractional rank): interpolate between the spanned integer places
+  const v = lo === hi ? placeValue(lo, players) : placeValue(lo, players) + (r - lo) * (placeValue(hi, players) - placeValue(lo, players));
+  return Math.max(0, Math.min(1, v));
 }
 
 export interface Standing {

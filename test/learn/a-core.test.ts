@@ -223,10 +223,14 @@ describe('reward', () => {
     expect(rankOf([40, 30, 30, 30], 30)).toBe(3);
     expect(rewardOf(1, 4)).toBe(1);
     expect(rewardOf(4, 4)).toBe(0);
-    expect(rewardOf(1.5, 4)).toBeCloseTo(5 / 6, 12);
+    expect(rewardOf(1.5, 4)).toBeCloseTo(0.675, 12);
+    expect(rewardOf(2, 6)).toBeCloseTo(0.35, 12);
+    expect(rewardOf(3, 6)).toBeCloseTo(0.1, 12);
+    expect(rewardOf(4, 6)).toBe(0);
+    expect(rewardOf(2, 2)).toBe(0);
     expect(rewardOf(1, 1)).toBe(1);
     const st = standingFromScores(new Map([[1, 40], [2, 40], [3, 5]]), 1, 2);
     expect(st).toMatchObject({ players: 3, realPlayers: 2, rank: 1.5, score: 40, bestOtherScore: 40, won: false });
-    expect(st.reward).toBeCloseTo(0.75, 12);
+    expect(st.reward).toBeCloseTo(0.675, 12);
   });
 });

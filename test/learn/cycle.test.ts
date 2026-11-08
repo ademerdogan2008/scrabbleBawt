@@ -97,7 +97,7 @@ describe('ingest', () => {
     expect(s.matchId).toBe(777);
     expect(s.won).toBe(false);
     expect(s.rank).toBe(2);
-    expect(s.reward).toBeCloseTo(0.5);
+    expect(s.reward).toBeCloseTo(0.35);
     expect(s.winner.name).toBe('Rival');
     expect(s.me.balance).toBe(10);
     expect(s.auctions).toHaveLength(7);
@@ -118,7 +118,7 @@ describe('ingest', () => {
     expect(averageRank([10, 20, 20, 5], 10)).toBe(4 - 1);
     expect(rewardOf(1, 6)).toBe(1);
     expect(rewardOf(6, 6)).toBe(0);
-    expect(rewardOf(2.5, 4)).toBeCloseTo(0.5);
+    expect(rewardOf(2.5, 4)).toBeCloseTo(0.225);
   });
 
   it('backfills only logs older than the grace period, once', () => {
@@ -129,7 +129,7 @@ describe('ingest', () => {
     expect(backfill(s, [sum], new Map([[777, 1_000]]), 9_000, 1_000)).toEqual([]);
     expect(s.matches).toHaveLength(1);
     expect(s.arms[0]!.plays).toBe(1);
-    expect(s.arms[0]!.alpha).toBeCloseTo(1.5);
+    expect(s.arms[0]!.alpha).toBeCloseTo(1.35);
   });
 });
 
@@ -268,15 +268,15 @@ describe('gate decision', () => {
     expect(g.reasons).toEqual([]);
     expect(g.pass).toBe(true);
     expect(g.gate.meanRankDelta).toBeLessThan(0);
-    expect(g.gate.ciHi).toBeLessThanOrEqual(0.05);
+    expect(g.gate.ciHi).toBeLessThanOrEqual(0.1);
     expect(g.gate.lobbySimsWin).toBe(1);
     expect(g.gate.matches).toBe(N);
   });
 
-  it('rejects when the live mirror does not improve', () => {
+  it('rejects a candidate that wins no more often', () => {
     const g = decideGate(inc, inc, lineups);
     expect(g.pass).toBe(false);
-    expect(g.reasons.join()).toMatch(/live mirror not improved/);
+    expect(g.reasons.join()).toMatch(/pooled win gain/);
   });
 
   it('rejects a significant regression on any lineup even if the mirror improves', () => {
@@ -285,7 +285,7 @@ describe('gate decision', () => {
     );
     const g = decideGate(inc, cand, lineups);
     expect(g.pass).toBe(false);
-    expect(g.reasons.join()).toMatch(/fullTable significantly worse/);
+    expect(g.reasons.join()).toMatch(/fullTable significantly fewer wins/);
   });
 
   it('rejects when lobbySims win rate drops below 98%', () => {

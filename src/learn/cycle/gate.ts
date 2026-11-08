@@ -1,12 +1,13 @@
 // Sim gate ("no regression" rule): paired-seed comparison of each candidate against the incumbent
 // on the standard lineups plus the live-mirror lineup.
 //
-// Pass when ALL of:
-//   1. pooled rank delta (candidate - incumbent, all lineups) has ciHi <= GATE.maxCiHi (0.05):
-//      not worse beyond a twentieth of a place at 95% confidence;
-//   2. no single lineup is significantly worse (per-lineup ciLo <= 0);
-//   3. the live-mirror lineup's mean rank delta is < 0 (strict improvement where we lost);
-//   4. the candidate's lobbySims win rate >= GATE.minLobbySimsWin (0.98).
+// Goal: wins first, rank as tiebreak. Pass when ALL of:
+//   1. pooled win-rate delta (candidate - incumbent, all lineups) has mean >= GATE.minWinGain
+//      (+0.5 pt) and ciLo >= GATE.minWinCiLo (-1 pt): more wins, not plausibly fewer;
+//   2. pooled rank delta ciHi <= GATE.maxCiHi (0.10): placement not clearly worse (tiebreak guard);
+//   3. no single lineup has a significantly lower win rate (per-lineup win-delta ciHi >= 0);
+//   4. the live-mirror lineup's win-rate delta is >= 0 (not worse where we play live);
+//   5. the candidate's lobbySims win rate >= GATE.minLobbySimsWin (0.98).
 // The incumbent is simulated once per seed and shared by all candidates (same seeds, same roster
 // order, same letters: the simulator's independent seeded streams make the comparison paired).
 import { parseSeat } from '../../bots/registry.js';
@@ -17,7 +18,9 @@ import { lineupLabels, matchSeed, rosterOrder, runJobs, type Job } from '../../s
 import type { ArmGate } from '../store.js';
 
 export const GATE = Object.freeze({
-  maxCiHi: 0.05,
+  minWinGain: 0.005,
+  minWinCiLo: -0.01,
+  maxCiHi: 0.1,
   maxLineupCiLo: 0,
   minLobbySimsWin: 0.98,
   mirrorMustImprove: true,
@@ -109,6 +112,7 @@ export interface LineupDelta {
   name: string;
   n: number;
   rank: PairedTest;
+  win: PairedTest;
   candWin: number;
   incWin: number;
   candRank: number;
@@ -120,6 +124,7 @@ export interface GateResult {
   reasons: string[];
   perLineup: LineupDelta[];
   pooled: PairedTest;
+  pooledWin: PairedTest;
   lobbySimsWin: number;
   gate: ArmGate;
 }
@@ -130,17 +135,24 @@ const mean = (xs: readonly number[]) => (xs.length ? xs.reduce((a, b) => a + b, 
 export function decideGate(inc: readonly FocalOutcome[][], cand: readonly FocalOutcome[][], lineups: readonly GateLineup[], th = GATE): GateResult {
   const perLineup: LineupDelta[] = [];
   const all: number[] = [];
+  const allWin: number[] = [];
   lineups.forEach((L, li) => {
     const a = cand[li] ?? [];
     const b = inc[li] ?? [];
     const n = Math.min(a.length, b.length);
     const d: number[] = [];
-    for (let k = 0; k < n; k++) d.push(a[k]!.rank - b[k]!.rank);
+    const dw: number[] = [];
+    for (let k = 0; k < n; k++) {
+      d.push(a[k]!.rank - b[k]!.rank);
+      dw.push((a[k]!.win ? 1 : 0) - (b[k]!.win ? 1 : 0));
+    }
     all.push(...d);
+    allWin.push(...dw);
     perLineup.push({
       name: L.name,
       n,
       rank: pairedT(d),
+      win: pairedT(dw),
       candWin: mean(a.slice(0, n).map((x) => (x.win ? 1 : 0))),
       incWin: mean(b.slice(0, n).map((x) => (x.win ? 1 : 0))),
       candRank: mean(a.slice(0, n).map((x) => x.rank)),
@@ -148,14 +160,17 @@ export function decideGate(inc: readonly FocalOutcome[][], cand: readonly FocalO
     });
   });
   const pooled = pairedT(all);
+  const pooledWin = pairedT(allWin);
   const reasons: string[] = [];
   if (all.length === 0) reasons.push('no paired matches');
+  if (pooledWin.mean < th.minWinGain) reasons.push(`pooled win gain ${(100 * pooledWin.mean).toFixed(2)} pt < ${100 * th.minWinGain} pt`);
+  if (pooledWin.lo < th.minWinCiLo) reasons.push(`pooled win delta ciLo ${(100 * pooledWin.lo).toFixed(2)} pt < ${100 * th.minWinCiLo} pt`);
   if (pooled.hi > th.maxCiHi) reasons.push(`pooled rank delta ciHi ${pooled.hi.toFixed(3)} > ${th.maxCiHi}`);
-  for (const l of perLineup) if (l.n > 1 && l.rank.lo > th.maxLineupCiLo) reasons.push(`${l.name} significantly worse (rank delta ${l.rank.mean.toFixed(3)} [${l.rank.lo.toFixed(3)}, ${l.rank.hi.toFixed(3)}])`);
+  for (const l of perLineup) if (l.n > 1 && l.win.hi < -th.maxLineupCiLo) reasons.push(`${l.name} significantly fewer wins (win delta ${(100 * l.win.mean).toFixed(1)} pt [${(100 * l.win.lo).toFixed(1)}, ${(100 * l.win.hi).toFixed(1)}])`);
   const mirror = perLineup.find((l) => l.name === MIRROR);
   if (th.mirrorMustImprove) {
     if (!mirror) reasons.push('no live-mirror lineup');
-    else if (!(mirror.rank.mean < 0)) reasons.push(`live mirror not improved (rank delta ${mirror.rank.mean.toFixed(3)})`);
+    else if (mirror.win.mean < 0) reasons.push(`live mirror win rate worse (win delta ${(100 * mirror.win.mean).toFixed(1)} pt)`);
   }
   const sims = perLineup.find((l) => l.name === 'lobbySims');
   const lobbySimsWin = sims ? sims.candWin : 0;
@@ -167,6 +182,7 @@ export function decideGate(inc: readonly FocalOutcome[][], cand: readonly FocalO
     reasons,
     perLineup,
     pooled,
+    pooledWin,
     lobbySimsWin,
     gate: {
       lineups: lineups.map((l) => l.name),
