@@ -252,6 +252,16 @@ export function createBawt(seed: number, overrides: Partial<BawtParams> = {}, na
       sureWinCap: p.sureWinCap,
       rng,
     });
+    if (
+      p.keyEdge > 0 &&
+      r.bid > 0 &&
+      prep.useful &&
+      r.reason !== 'sureWin' &&
+      view.config.auctionType !== 'FirstPrice' &&
+      VALUE[li]! >= p.keyMinFace
+    ) {
+      return { bid: Math.min(Math.floor(prep.balance), r.bid + Math.round(p.keyEdge)), reason: `${r.reason}+key` };
+    }
     return { bid: r.bid, reason: r.reason };
   };
 

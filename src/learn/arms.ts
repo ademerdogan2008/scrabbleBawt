@@ -34,6 +34,8 @@ export const LEARNABLE = Object.freeze({
   greedMinSeats: { lo: 0, hi: 6, def: 0 },
   baitRatio: { lo: 0.8, hi: 2, def: 2 },
   baitShade: { lo: 0.6, hi: 1, def: 1 },
+  keyEdge: { lo: 0, hi: 3, def: 0 },
+  keyMinFace: { lo: 3, hi: 8, def: 4 },
 } satisfies Record<string, Knob>);
 
 export type LearnableKey = keyof typeof LEARNABLE;

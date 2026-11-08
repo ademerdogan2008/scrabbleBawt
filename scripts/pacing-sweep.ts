@@ -1,8 +1,26 @@
 // Paired-seed sweep of Bawt param variants vs the current default on several table templates.
 //   npx tsx scripts/pacing-sweep.ts --matches 300 --workers 4 '{"reserve":5}' '{"incomeShare":0.6}'
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { comparePaired } from '../src/sim/tournament.js';
+import { mirrorLineup, type MirrorInput } from '../src/learn/cycle/mirror.js';
+import { eventsFromLog } from '../src/client/log.js';
 
+/** Live-mirror lineup from the last 20 live match logs (runs/live), '*' = focal. */
+function liveMirror(): string[] | undefined {
+  const dir = 'runs/live';
+  if (!existsSync(dir)) return undefined;
+  const inputs: MirrorInput[] = [];
+  for (const f of readdirSync(dir).filter((x) => x.startsWith('match-')).sort().slice(-20)) {
+    const st = (eventsFromLog(readFileSync(`${dir}/${f}`, 'utf8')) as any[]).find((e) => e.t === 'start');
+    if (st) inputs.push({ players: st.config.players, myId: st.config.myId });
+  }
+  const l = mirrorLineup(inputs);
+  return l?.map((x) => (x === '*' || x.startsWith('__') ? '*' : x));
+}
+
+const MIRROR = liveMirror();
 const TEMPLATES: Record<string, string[]> = {
+  ...(MIRROR ? { mirror: MIRROR } : {}),
   full: ['*', 'clone:k13', 'clone:lionel', 'clone:nijello', 'clone:lala', 'profile:Waupus'],
   lobby: ['*', 'clone:lucent', 'clone:bron', 'clone:maverick', 'sim:Aggressive', 'sim:ValueBidder'],
   prof: ['*', 'profile:LUCENT', 'profile:Bron', 'profile:K-13', 'profile:Lionel', 'profile:Lala'],

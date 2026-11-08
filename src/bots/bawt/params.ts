@@ -77,6 +77,11 @@ export interface BawtParams {
    *  own bid); released below baitRatio - baitHyst. Greed off -> calm* pacing, and while baited
    *  κ is also scaled by baitShade so the pusher overshoots onto letters it does not want. */
   greedMinSeats: number;
+  /** Key-letter edge (Vickrey): +keyEdge coins on a positive bid for a useful letter with face
+   *  value >= keyMinFace. Live losses show many high-value letters lost by ties or <= 2 coins;
+   *  in Vickrey the extra coins are paid only when a rival bid lands inside the edge. 0 = off. */
+  keyEdge: number;
+  keyMinFace: number;
   baitRatio: number;
   baitHyst: number;
   baitMinWins: number;
@@ -194,6 +199,8 @@ export const DEFAULT_PARAMS: Readonly<BawtParams> = Object.freeze({
   earlyUntil: 0.5,
   rampEnd: 0.75,
   greedMinSeats: 0,
+  keyEdge: 0,
+  keyMinFace: 4,
   baitRatio: 2,
   baitHyst: 0.1,
   baitMinWins: 4,
