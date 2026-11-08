@@ -242,6 +242,8 @@ export interface ProfileOptions {
   finalists?: readonly string[];
   recentMatches?: number;
   source?: string;
+  /** Only bots that played in the last N complete matches qualify (live-field fits); 0/undefined = no filter. */
+  activeWindow?: number;
 }
 
 const LEN_BUCKETS = 7; // 2,3,4,5,6,7,8+
@@ -395,6 +397,14 @@ function detectCap(letter: string, tops: number[]): LetterCap {
 }
 
 /** Build profiles.json content from a loaded dataset (pure, deterministic). */
+/** Bot ids seen in the last `window` complete matches (undefined when no window is set). */
+export function activeBots(complete: readonly HistMatch[], window?: number): Set<PlayerId> | undefined {
+  if (!window || window <= 0) return undefined;
+  const s = new Set<PlayerId>();
+  for (const m of complete.slice(-window)) for (const p of m.participants) s.add(p.botId);
+  return s;
+}
+
 export function buildProfiles(D: HistDataset, opts: ProfileOptions = {}): ProfilesFile {
   const minMatches = opts.minMatches ?? MIN_MATCHES;
   const modelMatches = opts.modelMatches ?? MODEL_MATCHES;
@@ -414,9 +424,11 @@ export function buildProfiles(D: HistDataset, opts: ProfileOptions = {}): Profil
       arr.push(m.id);
     }
   }
+  const active = activeBots(complete, opts.activeWindow);
   const accs = new Map<PlayerId, BotAcc>();
   for (const [id, ids] of eligible) {
     const b = D.bots.get(id)!;
+    if (active && !active.has(id)) continue;
     if (ids.length >= minMatches || finalists.has(b.name.toLowerCase())) {
       accs.set(id, new BotAcc(b, new Set(ids.slice(-modelMatches))));
     }

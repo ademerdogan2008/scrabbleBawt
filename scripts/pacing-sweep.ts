@@ -1,9 +1,11 @@
 // Paired-seed sweep of Bawt param variants vs the current default on several table templates.
 //   npx tsx scripts/pacing-sweep.ts --matches 300 --workers 4 '{"reserve":5}' '{"incomeShare":0.6}'
+//   nice npx tsx scripts/pacing-sweep.ts --templates liveField,liveFieldB '{"keyEdge":2}'  (live-fitted field)
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { comparePaired } from '../src/sim/tournament.js';
 import { mirrorLineup, type MirrorInput } from '../src/learn/cycle/mirror.js';
 import { eventsFromLog } from '../src/client/log.js';
+import { LINEUPS } from '../src/bots/lineups.js';
 
 /** Live-mirror lineup from the last 20 live match logs (runs/live), '*' = focal. */
 function liveMirror(): string[] | undefined {
@@ -32,10 +34,16 @@ const TEMPLATES: Record<string, string[]> = {
   baiterTable: ['*', 'trick:baiter', 'trick:baiter', 'clone:lucent', 'clone:bron', 'clone:k13'],
   baiterH2H: ['*', 'trick:baiter'],
   baitLate: ['*', 'trick:late', 'trick:jitter', 'trick:sniper', 'trick:endgameDumper', 'sim:Aggressive'],
+  liveField: [...LINEUPS.liveField.seats],
+  liveFieldB: [...LINEUPS.liveFieldB.seats],
 };
 const only = (() => {
-  const i = process.argv.indexOf('--only');
-  return i >= 0 ? new Set(process.argv.splice(i, 2)[1]!.split(',')) : undefined;
+  let i = process.argv.indexOf('--only');
+  if (i < 0) i = process.argv.indexOf('--templates');
+  if (i < 0) return undefined;
+  const names = process.argv.splice(i, 2)[1]!.split(',');
+  for (const n of names) if (!TEMPLATES[n]) throw new Error(`unknown template '${n}' (known: ${Object.keys(TEMPLATES).join(', ')})`);
+  return new Set(names);
 })();
 const argv = process.argv.slice(2);
 const opt = (k: string, d: number) => {
