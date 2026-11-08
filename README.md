@@ -26,11 +26,34 @@ npm run demo:local
 # 3. Shadow a LIVE maincloud match: Bawt decides every auction, submits nothing (anonymous).
 npm run demo:shadow
 
-# 4. Live play on maincloud (needs BOT_TOKEN in .env; the guard blocks game reducers otherwise)
-ALLOW_MAINCLOUD_PLAY=1 npm start
+# 4. Live play on maincloud with the shipped model (needs BOT_TOKEN in .env; the guard blocks
+#    game reducers otherwise). Runs Bawt v1 ("default") under a watchdog that restarts the client
+#    if it exits, stalls or starts skipping bids.
+ALLOW_MAINCLOUD_PLAY=1 npm run live
+
+# 5. Live game feed in a second terminal (opens each new match in your ScrabbleBot Chrome tab)
+npm run monitor
 ```
 
 `demo:local` needs the pinned spacetime CLI 2.12.0. See `e2e/README.md`.
+
+## Shipped model: Bawt v1 ("default")
+
+Live on maincloud as bot **Malicious** (id 168) against today's all-real lobbies
+(6 seats, 68 auctions, Vickrey):
+
+| model | live matches | wins | top 2 | top 3 | avg place | avg score |
+|---|---|---|---|---|---|---|
+| **Bawt v1 (default, shipped)** | 102 | **23 (22.5%)** | 31 (30%) | 53 (52%) | 3.31 | 80.4 |
+
+Chance for a 6-seat table is 16.7% wins and 50% top 3.
+
+Every other variant was A/B tested live through the learning wrapper (`src/learn`, Thompson
+bandit with a win-first reward) and dropped because it did not beat v1 on real matches:
+greedier pacing with a bait guard, key-letter edge, late harvest (early hold-back), coin dump,
+spending plan, hoarder counter, steady pace, Q4 greed and a Q2 brake. Several of them won clearly
+in the simulator against live-fitted opponent clones but not live, so live results decide.
+The per-variant journal is in `.planning/LEARNING.md`.
 
 ## Results (2026-11-07, Bawt v1)
 
