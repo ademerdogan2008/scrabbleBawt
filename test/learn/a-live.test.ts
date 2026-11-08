@@ -196,7 +196,8 @@ describe('learning wrapper', () => {
     const line = JSON.parse(lines[0]!) as { learn: { armId: string; rank: number; reward: number; posteriorMeans: Record<string, number> } };
     expect(line.learn).toMatchObject({ armId: 'default', rank: rec.rank, reward: rec.reward });
     expect(line.learn.posteriorMeans.default).toBeCloseTo(s.arms[0]!.alpha / 3, 3);
-    expect(readFileSync(logFile, 'utf8').trim()).toBe(lines[0]);
+    const fileLines = readFileSync(logFile, 'utf8').trim().split('\n');
+    expect(fileLines).toEqual([JSON.stringify({ armStart: { matchId: 11, armId: 'default' } }), lines[0]]);
 
     // same match id again (e.g. a resumed client): not learned twice
     play(h.factory(seatSeed), 11);
