@@ -55,27 +55,34 @@ function armId(matchId: number): string | undefined {
 }
 const tag = (matchId: number): string => `[${(armId(matchId) ?? '?').padEnd(10)}]`;
 
-/** Per-arm live record from learn.jsonl match-end lines (win = rank 1). */
+/** Per-arm live record from learn.jsonl match-end lines: wins | top2 | top3.
+ *  MONITOR_ARMS=a,b limits the table to those variants; MONITOR_SINCE=<matchId> counts only
+ *  matches from that id on (e.g. the start of a head-to-head trial). */
+const BOARD_ARMS = (process.env.MONITOR_ARMS ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const BOARD_SINCE = Number(process.env.MONITOR_SINCE ?? 0);
 function armBoard(): string {
-  const agg = new Map<string, { n: number; w: number; top2: number; rank: number }>();
+  const agg = new Map<string, { n: number; w: number; top2: number; top3: number }>();
   try {
     for (const l of readFileSync(join(dir, 'learn.jsonl'), 'utf8').split('\n')) {
       if (!l.startsWith('{"learn"')) continue;
       const a = JSON.parse(l).learn;
-      const r = agg.get(a.armId) ?? { n: 0, w: 0, top2: 0, rank: 0 };
+      if (a.matchId < BOARD_SINCE) continue;
+      if (BOARD_ARMS.length && !BOARD_ARMS.includes(a.armId)) continue;
+      const r = agg.get(a.armId) ?? { n: 0, w: 0, top2: 0, top3: 0 };
       r.n++;
-      r.rank += a.rank;
       if (a.rank === 1) r.w++;
       if (a.rank <= 2) r.top2++;
+      if (a.rank <= 3) r.top3++;
       agg.set(a.armId, r);
     }
   } catch {
     return '';
   }
-  const rows = [...agg.entries()].sort((x, y) => y[1].w / y[1].n - x[1].w / x[1].n);
-  return rows
-    .map(([id, r]) => `           ${id.padEnd(12)} ${String(r.w).padStart(3)}W/${String(r.n).padEnd(4)} win ${((100 * r.w) / r.n).toFixed(1).padStart(5)}%  top2 ${((100 * r.top2) / r.n).toFixed(0).padStart(3)}%  rank ${(r.rank / r.n).toFixed(2)}`)
-    .join('\n');
+  const pct = (x: number, n: number) => `${String(x).padStart(2)} (${((100 * x) / n).toFixed(0).padStart(3)}%)`;
+  const head = `           ${'variant'.padEnd(12)} ${'games'.padStart(5)}   ${'wins'.padEnd(10)}| ${'top2'.padEnd(10)}| top3` +
+    (BOARD_SINCE ? `   (since match ${BOARD_SINCE})` : '');
+  const rows = [...agg.entries()].sort((x, y) => y[1].w / y[1].n - x[1].w / x[1].n || y[1].top3 / y[1].n - x[1].top3 / x[1].n);
+  return [head, ...rows.map(([id, r]) => `           ${id.padEnd(12)} ${String(r.n).padStart(5)}   ${pct(r.w, r.n).padEnd(10)}| ${pct(r.top2, r.n).padEnd(10)}| ${pct(r.top3, r.n)}`)].join('\n');
 }
 
 interface Row { id: number; name: string; score: number; bal: number; won: number; words: string[] }
@@ -141,6 +148,7 @@ function scan(): void {
 }
 
 console.log(`live-game-monitor: watching ${dir} (Ctrl-C to quit)${BROWSER ? '; following matches in Chrome' : ''}`);
+console.log(`           — live record per variant —\n${armBoard()}`);
 let firstScan = true;
 scan();
 firstScan = false;
